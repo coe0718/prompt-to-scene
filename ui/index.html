@@ -381,7 +381,11 @@
     <h3 style="margin-top:8px;">Generators</h3>
     <div class="btn-row">
       <button class="btn" onclick="generateOutput('p5js')">p5.js Visual</button>
-      <button class="btn" onclick="generateOutput('ascii')">ASCII Art</button>
+      <button class="btn" onclick="generateOutput('ascii')">ASCII Basic</button>
+      <button class="btn" onclick="generateOutput('ascii-enhanced')">ASCII Enhanced</button>
+    </div>
+    <div class="btn-row" style="margin-top:2px;">
+      <button class="btn" onclick="generateOutput('procedural-audio')">Procedural Audio</button>
       <button class="btn" onclick="generateOutput('suno')">Suno Audio</button>
     </div>
     <button class="btn accent full" onclick="generateOutput('stitcher')" style="margin-top:4px;">✦ Stitch Final</button>
@@ -402,6 +406,9 @@
       <span id="uploaded-name" style="font-size:11px;color:var(--dim);align-self:center;"></span>
     </div>
     <input type="file" id="audio-upload" accept="audio/mpeg,audio/wav,audio/ogg,audio/flac" style="display:none" onchange="handleTrackDrop(this.files)">
+
+    <h3 style="margin-top:12px;">Lyrics</h3>
+    <textarea id="lyric-input" placeholder="Paste lyrics here for overlay in Final view..." style="width:100%;height:60px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:11px;padding:6px;border-radius:4px;resize:vertical;"></textarea>
 
     <h3 style="margin-top:12px;">Download</h3>
     <button class="btn green full" onclick="downloadActive()">⬇ Download Active Panel</button>
@@ -441,6 +448,8 @@
     <div class="tab-bar">
       <div class="tab active" data-panel="visual">p5.js Visual</div>
       <div class="tab" data-panel="ascii">ASCII Engine</div>
+      <div class="tab" data-panel="ascii-enhanced">ASCII Enhanced</div>
+      <div class="tab" data-panel="audio">Procedural Audio</div>
       <div class="tab" data-panel="final">Final Stitched</div>
       <div class="tab" data-panel="spec">Scene Spec (JSON)</div>
     </div>
@@ -454,8 +463,22 @@
 
     <div class="panel" id="panel-ascii">
       <div class="preview-frame">
-        <div class="placeholder" id="placeholder-ascii">Click "ASCII Art" to generate</div>
+        <div class="placeholder" id="placeholder-ascii">Click "ASCII Art" to generate (basic)</div>
         <iframe id="frame-ascii" style="display:none;"></iframe>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-ascii-enhanced">
+      <div class="preview-frame">
+        <div class="placeholder" id="placeholder-ascii-enhanced">Click "ASCII Enhanced" for 4-layer renderer</div>
+        <iframe id="frame-ascii-enhanced" style="display:none;"></iframe>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-audio">
+      <div class="preview-frame">
+        <div class="placeholder" id="placeholder-audio">Click "Procedural Audio" for Web Audio synth</div>
+        <iframe id="frame-audio" style="display:none;"></iframe>
       </div>
     </div>
 
@@ -805,6 +828,12 @@ function generateOutput(type) {
     case 'ascii':
       generateASCII(spec, specJSON);
       break;
+    case 'ascii-enhanced':
+      generateASCIIEnhanced(spec, specJSON);
+      break;
+    case 'procedural-audio':
+      generateProceduralAudio(spec, specJSON);
+      break;
     case 'suno':
       alert('Suno generation requires Node.js server and API key.\nRun: node generators/suno.js test-spec.json');
       break;
@@ -859,8 +888,72 @@ function generateASCII(spec, specJSON) {
   document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
 }
 
+async function generateASCIIEnhanced(spec, specJSON) {
+  let html;
+  try {
+    const resp = await fetch('/api/generate/ascii-enhanced', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spec })
+    });
+    html = await resp.text();
+  } catch(e) {
+    console.warn('ASCII Enhanced fetch failed, using local fallback:', e);
+    html = buildASCIIHTML(spec).replaceAll('</scr' + 'ipt>', '</scr' + 'ipt>');
+  }
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  generatedOutputs['ascii-enhanced'] = url;
+
+  const frame = document.getElementById('frame-ascii-enhanced');
+  const placeholder = document.getElementById('placeholder-ascii-enhanced');
+  frame.src = url;
+  frame.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+
+  switchTab('ascii-enhanced');
+  document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+}
+
+async function generateProceduralAudio(spec, specJSON) {
+  let html;
+  try {
+    const resp = await fetch('/api/generate/procedural-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spec })
+    });
+    html = await resp.text();
+  } catch(e) {
+    console.warn('Procedural Audio fetch failed:', e);
+    alert('Procedural Audio generator requires the server.\nStart with: node server.js');
+    return;
+  }
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  generatedOutputs['procedural-audio'] = url;
+
+  const frame = document.getElementById('frame-audio');
+  const placeholder = document.getElementById('placeholder-audio');
+  frame.src = url;
+  frame.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+
+  switchTab('audio');
+  document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+}
+
 function generateStitcher(spec, specJSON) {
-  const html = buildStitcherHTML(spec, uploadedAudioDataUrl).replaceAll('<\/script>', '</scr' + 'ipt>');
+  let html = buildStitcherHTML(spec, uploadedAudioDataUrl).replaceAll('<\\/script>', '</scr' + 'ipt>');
+
+  // Inject lyric overlay if lyrics are provided
+  const lyrics = document.getElementById('lyric-input').value.trim();
+  if (lyrics) {
+    const lines = lyrics.split('\n').filter(l => l.trim());
+    const lyricHTML = '<div id="lyric-overlay" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);text-align:center;font-family:\'Courier New\',monospace;font-size:16px;color:rgba(255,255,255,0.85);text-shadow:0 0 10px rgba(0,0,0,0.8);z-index:20;pointer-events:none;max-width:90%;line-height:1.6;"><div id="lyric-line" style="transition:opacity 0.3s;">' + lines[0] + '</div></div>';
+    html = html.replace('</body>', lyricHTML + '\n<script>\n(function(){\n  const lines=' + JSON.stringify(lines) + ';\n  const el=document.getElementById("lyric-line");\n  if(!el||!lines.length)return;\n  let idx=0;\n  const update=()=>{\n    const beat=parseInt(document.getElementById("hud-beat")?.textContent||0);\n    const newIdx=Math.floor(beat/8)%lines.length;\n    if(newIdx!==idx){idx=newIdx;el.style.opacity=0;setTimeout(()=>{el.textContent=lines[idx];el.style.opacity=1;},150);}\n    requestAnimationFrame(update);\n  };\n  update();\n})();\n</script>\n</body>');
+  }
+
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   generatedOutputs.final = url;
