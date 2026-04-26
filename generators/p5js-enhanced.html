@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Enhanced p5.js Generator</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
-<script>p5.disableFriendlyErrors=true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
+<script>try{window.addEventListener("deviceorientation",function(){},true);window.addEventListener("devicemotion",function(){},true)}catch(e){}</script>
 <style>html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}</style>
 </head>
 <body>
@@ -35,7 +35,7 @@ const P = V.palette.map(h => {
 });
 
 // ═══ STATE ═══
-var startTime, pgBloom, pgVignette;
+console.log("Enhanced p5.js v2 loaded — scene:",S.name,"style:",V.style,"palette:",V.palette.length+" colors"); var startTime, pgBloom, pgVignette;
 var ambientParticles = [], attractors = [], pulses = [];
 var particles = [], organicNodes = [], organicConns = [];
 var prevBeat = -1;
@@ -69,7 +69,7 @@ function drawAmbient(t, p) {
       const n = noise(x * 0.003, y * 0.003, t * 0.1);
       const pi = Math.floor(n * P.length);
       const c = P[Math.min(pi, P.length - 1)] || { h: 200, s: 30, b: 40 };
-      const brightness = 3 + n * 6;
+      const brightness = 8 + n * 14;
       fill(c.h, c.s * 0.3, brightness, c.b > 50 ? 60 : 30);
       rect(x, y, step, step);
     }

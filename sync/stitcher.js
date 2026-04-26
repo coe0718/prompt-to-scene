@@ -83,7 +83,7 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${scene.name || 'Scene'} — Prompt-to-Scene</title>
   <script>p5.disableFriendlyErrors = true;</script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
