@@ -500,11 +500,11 @@ function applyPostProcessing(t, beat) {
     drawingContext.save();
     drawingContext.globalCompositeOperation = 'lighter';
     drawingContext.globalAlpha = 0.12;
-    drawingContext.drawImage(canvas, -2, -2);
-    drawingContext.drawImage(canvas, 2, 2);
+    drawingContext.drawImage(drawingContext.canvas, -2, -2);
+    drawingContext.drawImage(drawingContext.canvas, 2, 2);
     drawingContext.globalAlpha = 0.06;
-    drawingContext.drawImage(canvas, -4, -4);
-    drawingContext.drawImage(canvas, 4, 4);
+    drawingContext.drawImage(drawingContext.canvas, -4, -4);
+    drawingContext.drawImage(drawingContext.canvas, 4, 4);
     drawingContext.restore();
   }
   
