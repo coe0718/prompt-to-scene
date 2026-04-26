@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt-to-Scene · Hackathon Demo</title>
+  <!-- Don't need to view the CSS separately — it's clean and contained -->
+  <style>
+    :root {
+      --bg: #06060a;
+      --surface: rgba(255,255,255,0.03);
+      --glass: rgba(255,255,255,0.05);
+      --glass-border: rgba(255,255,255,0.06);
+      --text: #e0e0f0;
+      --dim: rgba(255,255,255,0.35);
+      --accent: #c084fc;
+      --accent2: #60a5fa;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --pink: #f472b6;
+      --cyan: #22d3ee;
+      --shadow: 0 8px 32px rgba(0,0,0,0.4);
+      --glow: 0 0 20px rgba(192,132,252,0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    /* Animated gradient background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(192,132,252,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(96,165,250,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(244,114,182,0.05) 0%, transparent 50%);
+      animation: ambientShift 15s ease-in-out infinite alternate;
+    }
+    @keyframes ambientShift {
+      0% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0.7; transform: scale(0.98); }
+    }
+    /* Glass card */
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    /* Header */
+    header {
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .logo {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--pink) 50%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .logo span {
+      font-weight: 400;
+      font-size: 13px;
+      opacity: 0.5;
+      -webkit-text-fill-color: var(--dim);
+    }
+    /* Prompt bar */
+    .prompt-bar {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      max-width: 600px;
+    }
+    .prompt-bar input {
+      flex: 1;
+      padding: 12px 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.3s;
+      backdrop-filter: blur(10px);
+    }
+    .prompt-bar input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(192,132,252,0.1);
+    }
+    .prompt-bar button {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px rgba(192,132,252,0.25);
+    }
+    .prompt-bar button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(192,132,252,0.35);
+    }
+    .prompt-bar button:active { transform: scale(0.97); }
+    .prompt-bar button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+    /* Container */
+    .container {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      min-height: calc(100vh - 90px);
+    }
+    /* Sidebar */
+    .sidebar {
+      border-right: 1px solid rgba(255,255,255,0.04);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      background: rgba(255,255,255,0.01);
+    }
+    .sidebar h3 {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--dim);
+      margin-bottom: 2px;
+      font-weight: 600;
+    }
+    .scene-select {
+      padding: 12px 14px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      font-size: 13px;
+      transition: all 0.2s;
+      backdrop-filter: blur(10px);
+    }
+    .scene-select:hover { border-color: var(--accent2); transform: translateX(2px); }
+    .scene-select.active { border-color: var(--accent); background: rgba(192,132,252,0.1); box-shadow: var(--glow); }
+    .scene-select .name { font-weight: 700; }
+    .scene-select .mood { font-size: 11px; color: var(--dim); margin-top: 2px; }
+    .btn {
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      background: var(--glass);
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      backdrop-filter: blur(10px);
+    }
+    .btn:hover { border-color: var(--accent2); background: rgba(96,165,250,0.08); }
+    .btn.active { border-color: var(--accent); background: rgba(192,132,252,0.12); }
+    .btn.accent { border-color: var(--accent); color: var(--accent); }
+    .btn.green { border-color: var(--green); color: var(--green); }
+    .btn.full { width: 100%; justify-content: center; display: flex; }
+    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    /* Workspace */
+    .workspace {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .tab {
+      padding: 10px 22px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--dim);
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      border-radius: 8px 8px 0 0;
+    }
+    .tab:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .panel { display: none; flex: 1; min-height: 400px; }
+    .panel.active { display: flex; }
+    .preview-frame {
+      flex: 1;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+    .preview-frame iframe {
+      width: 100%; height: 100%; border: none;
+    }
+    .preview-frame .placeholder {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--dim); font-size: 14px;
+    }
+    /* Spec visualization card */
+    .spec-card {
+      padding: 28px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: var(--shadow);
+    }
+    .spec-card .spec-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .spec-card .spec-name {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .mood-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border: 1px solid;
+    }
+    .mood-badge.energetic { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1); }
+    .mood-badge.calm { color: #4ade80; border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.1); }
+    .mood-badge.dark { color: #a78bfa; border-color: rgba(167,139,250,0.3); background: rgba(167,139,250,0.1); }
+    .mood-badge.uplifting { color: #f472b6; border-color: rgba(244,114,182,0.3); background: rgba(244,114,182,0.1); }
+    .mood-badge.melancholic { color: #60a5fa; border-color: rgba(96,165,250,0.3); background: rgba(96,165,250,0.1); }
+    .mood-badge.chaotic { color: #f87171; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.1); }
+    .mood-badge.meditative { color: #22d3ee; border-color: rgba(34,211,238,0.3); background: rgba(34,211,238,0.1); }
+    .mood-badge.nostalgic { color: #fb923c; border-color: rgba(251,146,60,0.3); background: rgba(251,146,60,0.1); }
+    .spec-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 12px;
+    }
+    .spec-stat {
+      padding: 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      text-align: center;
+    }
+    .spec-stat .val { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+    .spec-stat .label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+    .palette-swatches {
+      display: flex;
+      gap: 6px;
+    }
+    .palette-swatch {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      border: 2px solid rgba(255,255,255,0.1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    /* Status bar */
+    .status-bar {
+      padding: 10px 24px;
+      font-size: 11px;
+      color: var(--dim);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      gap: 24px;
+      background: rgba(255,255,255,0.01);
+    }
+    .status-bar .ok { color: var(--green); }
+    /* Gallery */
+    .gallery-item {
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .gallery-item:hover { background: var(--surface); border-color: var(--glass-border); }
+    .gal-name { font-weight: 700; display: block; }
+    .gal-meta { color: var(--dim); font-size: 10px; }
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.04); flex-direction: row; flex-wrap: wrap; }
+      header { flex-direction: column; align-items: stretch; }
+      .prompt-bar { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">Prompt-to-Scene <span>v1.0</span></div>
+
+  <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;flex:1;">
+    <!-- Path 1: Visualize My Track -->
+    <div id="path-track" style="flex:1;min-width:260px;padding:12px;background:var(--surface);border:2px dashed var(--border);border-radius:10px;cursor:pointer;text-align:center;transition:border-color 0.2s;"
+         onclick="document.getElementById('audio-upload-big').click()"
+         ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+         ondragleave="this.style.borderColor='var(--border)'"
+         ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleTrackDrop(event.dataTransfer.files)">
+      <div style="font-size:16px;margin-bottom:2px;">🎵 <b>Visualize My Track</b></div>
+      <div style="font-size:11px;color:var(--dim);">Drop MP3 — auto-visualize</div>
+      <div id="track-status" style="font-size:10px;color:var(--green);margin-top:4px;"></div>
+    </div>
+    <input type="file" id="audio-upload-big" accept="audio/mpeg,audio/wav,audio/ogg,audio/flac" style="display:none" onchange="handleTrackDrop(this.files)">
+
+    <!-- Path 2: Create a Scene -->
+    <div id="path-scene" style="flex:2;min-width:320px;">
+      <div style="font-size:14px;margin-bottom:6px;color:var(--accent);">✨ <b>Create a Scene</b></div>
+      <div class="prompt-bar" style="max-width:100%;margin-bottom:6px;">
+        <input id="prompt-input" type="text" value="A cyberpunk cityscape at night with rain and neon lights" placeholder="Describe your scene...">
+        <button id="generate-btn" onclick="generateScene()">✦ Generate</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="aspect-select" onchange="updateAspect()" style="padding:6px 10px;background:var(--glass);border:1px solid var(--glass-border);border-radius:8px;color:var(--text);font-size:12px;">
+          <option value="16:9">16:9 Landscape</option>
+          <option value="9:16">9:16 Portrait (TikTok/Reels)</option>
+          <option value="1:1">1:1 Square</option>
+        </select>
+        <label style="font-size:11px;color:var(--dim);">Duration:</label>
+        <input id="duration-slider" type="range" min="15" max="120" value="45" oninput="document.getElementById('dur-val').textContent=this.value+'s'" style="width:80px;">
+        <span id="dur-val" style="font-size:11px;color:var(--dim);">45s</span>
+        <label style="font-size:11px;color:var(--dim);">Intensity:</label>
+        <select id="intensity-select" onchange="updateIntensity()" style="padding:6px 10px;background:var(--glass);border:1px solid var(--glass-border);border-radius:8px;color:var(--text);font-size:12px;">
+          <option value="0.25">Chill</option>
+          <option value="0.5" selected>Balanced</option>
+          <option value="0.9">Max</option>
+        </select>
+        <label style="font-size:11px;color:var(--dim);">Mode:</label>
+        <select id="mode-select" style="padding:6px 10px;background:var(--glass);border:1px solid var(--glass-border);border-radius:8px;color:var(--text);font-size:12px;">
+          <option value="preset" selected>🎨 Presets (instant)</option>
+          <option value="llm">🤖 LLM (AI generated)</option>
+        </select>
+      </div>
+      <div style="margin-top:6px;">
+        <textarea id="lyrics-input" placeholder="Paste lyrics here (one line per phrase) — auto-timed to beats" style="width:100%;height:40px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:system-ui;resize:none;" onfocus="this.style.height='60px'" onblur="this.style.height='40px'"></textarea>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h3>Scenes</h3>
+    <div id="scene-list"></div>
+
+    <h3 style="margin-top:8px;">Generators</h3>
+    <div class="btn-row">
+      <button class="btn" onclick="generateOutput('p5js')">p5.js Visual</button>
+      <button class="btn" onclick="generateOutput('ascii')">ASCII Art</button>
+      <button class="btn" onclick="generateOutput('suno')">Suno Audio</button>
+    </div>
+    <button class="btn accent full" onclick="generateOutput('stitcher')" style="margin-top:4px;">✦ Stitch Final</button>
+    <button class="btn full" onclick="generateOutput('stitcher'); setTimeout(()=>alert('Open the Final tab, press Play, then press G for GIF or V for WebM recording.'),500)" style="margin-top:4px;">⏺ Record Demo</button>
+
+    <button class="btn full" onclick="showBatchUI()">📦 Batch Generate</button>
+    <div id="batch-progress" style="display:none;margin-top:4px;">
+      <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+        <div id="batch-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;"></div>
+      </div>
+      <div id="batch-status" style="font-size:10px;color:var(--dim);margin-top:2px;"></div>
+      <span id="batch-count" style="font-size:10px;color:var(--dim);"></span>
+    </div>
+
+    <div class="btn-row" style="margin-top:4px;">
+      <button class="btn" onclick="surpriseMe()">🎲 Surprise Me</button>
+      <button class="btn" onclick="document.getElementById('audio-upload').click()">📁 Upload MP3</button>
+      <span id="uploaded-name" style="font-size:11px;color:var(--dim);align-self:center;"></span>
+    </div>
+    <input type="file" id="audio-upload" accept="audio/mpeg,audio/wav,audio/ogg,audio/flac" style="display:none" onchange="handleTrackDrop(this.files)">
+
+    <h3 style="margin-top:12px;">Download</h3>
+    <button class="btn green full" onclick="downloadActive()">⬇ Download Active Panel</button>
+    <button class="btn full" onclick="downloadAll()">⬇ Download All Outputs</button>
+    <button class="btn full" onclick="shareURL()">🔗 Copy Share URL</button>
+    <button class="btn full" onclick="toggleSideBySide()">⊞ Side-by-Side 4-Up</button>
+    <button class="btn full" onclick="copyEmbedCode()" style="color:var(--green);">📋 Copy Embed Code</button>
+
+    <h3 style="margin-top:12px;">Gallery</h3>
+    <div id="gallery-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+
+    <h3 style="margin-top:12px;">Visual Style</h3>
+    <div class="btn-row" id="style-btns">
+      <button class="btn" data-style="ascii">ASCII</button>
+      <button class="btn active" data-style="geometric">Geo</button>
+      <button class="btn" data-style="particles">Particles</button>
+      <button class="btn" data-style="waveform">Wave</button>
+      <button class="btn" data-style="glitch">Glitch</button>
+      <button class="btn" data-style="minimal">Minimal</button>
+      <button class="btn" data-style="retro">Retro</button>
+      <button class="btn" data-style="organic">Organic</button>
+    </div>
+
+    <h3 style="margin-top:12px;">Effects</h3>
+    <div class="btn-row" id="effect-btns">
+      <button class="btn" data-effect="scanlines">Scanlines</button>
+      <button class="btn" data-effect="noise">Noise</button>
+      <button class="btn active" data-effect="bloom">Bloom</button>
+      <button class="btn" data-effect="chromatic">Chromatic</button>
+      <button class="btn" data-effect="vignette">Vignette</button>
+      <button class="btn" data-effect="drift">Drift</button>
+    </div>
+  </div>
+
+  <!-- Workspace -->
+  <div class="workspace">
+    <div class="tab-bar">
+      <div class="tab active" data-panel="visual">p5.js Visual</div>
+      <div class="tab" data-panel="ascii">ASCII Engine</div>
+      <div class="tab" data-panel="final">Final Stitched</div>
+      <div class="tab" data-panel="spec">Scene Spec (JSON)</div>
+    </div>
+
+    <div class="panel active" id="panel-visual">
+      <div class="preview-frame">
+        <div class="placeholder" id="placeholder-visual">Click "p5.js Visual" to generate</div>
+        <iframe id="frame-visual" style="display:none;"></iframe>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-ascii">
+      <div class="preview-frame">
+        <div class="placeholder" id="placeholder-ascii">Click "ASCII Art" to generate</div>
+        <iframe id="frame-ascii" style="display:none;"></iframe>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-final">
+      <div class="preview-frame">
+        <div class="placeholder" id="placeholder-final">Click "Stitch Final" to combine audio + visuals</div>
+        <iframe id="frame-final" style="display:none;"></iframe>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-spec">
+      <div class="spec-card" id="spec-content">
+        <div style="color:var(--dim);text-align:center;padding:40px;">Loading default scene...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span>Director: <span id="status-director" class="ok">minimax-m2.5</span></span>
+  <span>Scene: <span id="status-scene">neon-rain</span></span>
+  <span>Tempo: <span id="status-tempo">85 BPM</span></span>
+  <span>Duration: <span id="status-duration">45s</span></span>
+  <span>Last generated: <span id="status-time">—</span></span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// BUILT-IN SCENE CATALOG (pre-generated specs)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SCENES = {
+  'neon-rain': {
+    version: '1.0',
+    prompt: 'A cyberpunk cityscape at night with rain and neon lights',
+    scene: { name: 'neon-rain', mood: 'melancholic', tempo: 85, duration_seconds: 45, genre: 'electronic', tags: ['synthwave','retro','cinematic'] },
+    audio: { prompt: 'Synthwave electronic with retro 80s synths, slow build, melancholic atmosphere, pulsing bass, dreamy pads', instrumental: true, model: 'chirp-4' },
+    visual: { style: 'ascii', color_palette: ['#ff00ff','#00ffff','#1a1a2e'], effects: ['scanlines','bloom'], intensity: 0.7, ascii_char_set: 'standard', resolution: {width:80,height:40} },
+    timing: { beat_interval_ms: 705, bar_length_beats: 4,
+      sections: [{name:'intro',start_beat:0,end_beat:8},{name:'build',start_beat:8,end_beat:24},{name:'drop',start_beat:24,end_beat:40},{name:'outro',start_beat:40,end_beat:48}],
+      key_moments: [{beat:24,event:'drop'},{beat:40,event:'fade'}]
+    },
+    metadata: { director_model: 'minimax-m2.5', generated_at: '2026-04-25T18:00:00Z', generation_time_ms: 1200 }
+  },
+  'cosmic-drift': {
+    version: '1.0',
+    prompt: 'A spaceship drifting through a colorful nebula with distant stars',
+    scene: { name: 'cosmic-drift', mood: 'meditative', tempo: 95, duration_seconds: 60, genre: 'ambient', tags: ['space','ethereal','floating'] },
+    audio: { prompt: 'Ambient space music with slow evolving pads, twinkling stars, deep sub bass, weightless atmosphere', instrumental: true, model: 'chirp-4' },
+    visual: { style: 'particles', color_palette: ['#7b2ff7','#00d4ff','#ff6ec7','#0a0a1a'], effects: ['bloom','drift'], intensity: 0.65, ascii_char_set: 'standard' },
+    timing: { beat_interval_ms: 631, bar_length_beats: 4,
+      sections: [{name:'intro',start_beat:0,end_beat:16},{name:'build',start_beat:16,end_beat:40},{name:'drop',start_beat:40,end_beat:72},{name:'outro',start_beat:72,end_beat:96}],
+      key_moments: [{beat:40,event:'nebula burst'},{beat:72,event:'fade out'}]
+    },
+    metadata: { director_model: 'minimax-m2.5', generated_at: '2026-04-25T18:10:00Z', generation_time_ms: 980 }
+  },
+  'chaos-grid': {
+    version: '1.0',
+    prompt: 'A glitchy digital grid collapsing into chaos with electric sparks',
+    scene: { name: 'chaos-grid', mood: 'chaotic', tempo: 160, duration_seconds: 30, genre: 'electronic', tags: ['glitch','digital','intense'] },
+    audio: { prompt: 'Aggressive glitch electronic, distorted bass, fast breakbeats, digital noise, high energy chaos', instrumental: true, model: 'chirp-4-5' },
+    visual: { style: 'glitch', color_palette: ['#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff'], effects: ['chromatic','noise','scanlines'], intensity: 0.9, ascii_char_set: 'hex' },
+    timing: { beat_interval_ms: 375, bar_length_beats: 4,
+      sections: [{name:'intro',start_beat:0,end_beat:8},{name:'build',start_beat:8,end_beat:24},{name:'drop',start_beat:24,end_beat:56},{name:'outro',start_beat:56,end_beat:80}],
+      key_moments: [{beat:24,event:'glitch storm'},{beat:56,event:'system crash'}]
+    },
+    metadata: { director_model: 'kimi-k2.5-nim', generated_at: '2026-04-25T18:15:00Z', generation_time_ms: 1450 }
+  },
+  'nature-reclaim': {
+    version: '1.0',
+    prompt: 'Vines and flowers slowly overtaking an abandoned concrete structure',
+    scene: { name: 'nature-reclaim', mood: 'uplifting', tempo: 110, duration_seconds: 50, genre: 'folk', tags: ['organic','growth','hopeful'] },
+    audio: { prompt: 'Folk acoustic with nature sounds, gentle guitar, birdsong, hopeful progression, warm atmosphere', instrumental: true, model: 'chirp-4' },
+    visual: { style: 'organic', color_palette: ['#4ecdc4','#a8e6cf','#ffd3b6','#2d6a4f'], effects: ['bloom','vignette'], intensity: 0.55, ascii_char_set: 'detailed' },
+    timing: { beat_interval_ms: 545, bar_length_beats: 4,
+      sections: [{name:'intro',start_beat:0,end_beat:12},{name:'build',start_beat:12,end_beat:32},{name:'drop',start_beat:32,end_beat:64},{name:'outro',start_beat:64,end_beat:92}],
+      key_moments: [{beat:32,event:'bloom'},{beat:64,event:'settle'}]
+    },
+    metadata: { director_model: 'minimax-m2.5', generated_at: '2026-04-25T18:20:00Z', generation_time_ms: 1100 }
+  },
+};
+
+let activeScene = 'neon-rain';
+let activeTab = 'visual';
+let activeStyle = 'geometric';
+let activeEffects = ['bloom'];
+let generatedOutputs = {}; // { p5js: blobUrl, ascii: blobUrl, final: blobUrl }
+let uploadedAudioDataUrl = null;
+let newSceneSpec = null; // stores the latest API-generated spec
+
+function updateAspect() {
+  // Aspect ratio changes are applied when generating
+}
+
+function updateIntensity() {
+  // Applied during generation
+}
+
+async function generateScene() {
+  const prompt = document.getElementById('prompt-input').value.trim();
+  if (!prompt || prompt.length < 2) return;
+
+  const btn = document.getElementById('generate-btn');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Generating...';
+  btn.disabled = true;
+
+  try {
+    const duration = parseInt(document.getElementById('duration-slider').value);
+    const intensity = parseFloat(document.getElementById('intensity-select').value);
+    const aspect = document.getElementById('aspect-select').value;
+    const lyricsText = document.getElementById('lyrics-input').value.trim();
+    const lyrics = lyricsText ? lyricsText.split('\n').map(s => s.trim()).filter(s => s) : null;
+
+    const usePreset = document.getElementById('mode-select').value !== 'llm';
+    const body = { prompt, duration, use_preset: usePreset };
+    if (!usePreset) body.model = 'minimax-m2.5';
+
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Generation failed');
+    }
+
+    const spec = await response.json();
+
+    // Apply user overrides
+    spec.visual = spec.visual || {};
+    spec.visual.intensity = intensity;
+    if (lyrics) spec.lyrics = lyrics;
+    if (aspect === '16:9') spec.visual.resolution = { width: 1920, height: 1080 };
+    else if (aspect === '9:16') spec.visual.resolution = { width: 1080, height: 1920 };
+    else spec.visual.resolution = { width: 1080, height: 1080 };
+
+    // Store as new scene
+    const key = spec.scene?.name || 'custom';
+    SCENES[key] = spec;
+    activeScene = key;
+    newSceneSpec = spec;
+
+    // Update UI
+    renderSceneList();
+    showSceneSpec(spec);
+    document.getElementById('status-time').textContent = spec.metadata?.generated_at || new Date().toISOString();
+    document.getElementById('status-director').textContent = spec.metadata?.director_model || 'api';
+    document.getElementById('status-scene').textContent = spec.scene?.name || 'custom';
+    document.getElementById('status-tempo').textContent = (spec.scene?.tempo || '?') + ' BPM';
+    document.getElementById('status-duration').textContent = (spec.scene?.duration_seconds || '?') + 's';
+
+    generatedOutputs = {};
+    clearAllFrames();
+    saveToGallery(spec);
+
+    // Auto-generate p5js
+    generateOutput('p5js');
+
+  } catch(e) {
+    console.error('Generate failed:', e);
+    alert('Generation failed: ' + e.message + '\n\nUsing pre-built scene instead.');
+    // Fall back to surprise me
+    surpriseMe();
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function init() {
+  if (!loadFromHash()) {
+    renderSceneList();
+    showSceneSpec(SCENES[activeScene]);
+  }
+  updateStatus();
+  setupTabs();
+  setupStyleButtons();
+  setupEffectButtons();
+  renderGallery();
+}
+
+function renderSceneList() {
+  const list = document.getElementById('scene-list');
+  list.innerHTML = '';
+  for (const [name, spec] of Object.entries(SCENES)) {
+    const btn = document.createElement('button');
+    btn.className = 'scene-select' + (name === activeScene ? ' active' : '');
+    btn.innerHTML = `<div class="name">${spec.scene.name}</div><div class="mood">${spec.scene.mood} · ${spec.scene.tempo}BPM · ${spec.scene.genre}</div>`;
+    btn.onclick = () => selectScene(name);
+    list.appendChild(btn);
+  }
+}
+
+function selectScene(name) {
+  activeScene = name;
+  // Apply the scene's visual settings
+  const spec = SCENES[name];
+  if (spec.visual?.style) activeStyle = spec.visual.style;
+  if (spec.visual?.effects) activeEffects = [...spec.visual.effects];
+  updateStyleButtons();
+  updateEffectButtons();
+  generatedOutputs = {}; // clear cached outputs
+  clearAllFrames();
+  showSceneSpec(spec);
+  updateStatus();
+  renderSceneList();
+  // Auto-generate visual for the selected scene
+  generateOutput('p5js');
+}
+
+function showSceneSpec(spec) {
+  const container = document.getElementById('spec-content');
+  const s = spec.scene || {};
+  const v = spec.visual || {};
+  const a = spec.audio || {};
+  const t = spec.timing || {};
+  const m = spec.metadata || {};
+
+  // Style emoji
+  const styleEmoji = {
+    ascii: '⌨️', geometric: '🔷', particles: '✨', waveform: '〰️',
+    glitch: '⚡', minimal: '◻️', retro: '📺', organic: '🌿'
+  };
+
+  // Effects list
+  const effects = (v.effects || []).map(e => `<span style="padding:2px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;">${e}</span>`).join(' ');
+
+  // Palette swatches
+  const palette = (v.color_palette || []).map(h =>
+    `<div class="palette-swatch" style="background:${h};" title="${h}"></div>`
+  ).join('');
+
+  // Sections
+  const sections = (t.sections || []).map(sec =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 8px;background:rgba(255,255,255,0.02);border-radius:6px;font-size:11px;">
+      <span>${sec.name}</span><span style="color:var(--dim);">beat ${sec.start_beat}→${sec.end_beat}</span></div>`
+  ).join('');
+
+  container.innerHTML = `
+    <div class="spec-header">
+      ${spec.prompt ? `<span style="font-size:12px;color:var(--dim);">"${spec.prompt}"</span>` : ''}
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span class="spec-name">${s.name || 'untitled'}</span>
+      <span class="mood-badge ${s.mood || ''}">${s.mood || '—'}</span>
+      <span style="font-size:11px;color:var(--dim);">${s.genre || ''} · ${styleEmoji[v.style] || ''} ${v.style || ''}</span>
+    </div>
+    <div class="spec-stats">
+      <div class="spec-stat"><div class="val" style="color:var(--accent);">${s.tempo||'?'}</div><div class="label">BPM</div></div>
+      <div class="spec-stat"><div class="val" style="color:var(--accent2);">${s.duration_seconds||'?'}s</div><div class="label">Duration</div></div>
+      <div class="spec-stat"><div class="val" style="color:var(--green);">${Math.round(v.intensity*100)||'?'}%</div><div class="label">Intensity</div></div>
+      <div class="spec-stat"><div class="val" style="color:var(--pink);">${t.beat_interval_ms||'?'}ms</div><div class="label">Beat Interval</div></div>
+    </div>
+    ${palette ? `<div><div style="font-size:10px;color:var(--dim);margin-bottom:4px;letter-spacing:1px;">PALETTE</div><div class="palette-swatches">${palette}</div></div>` : ''}
+    ${effects ? `<div><span style="font-size:10px;color:var(--dim);letter-spacing:1px;">EFFECTS</span> <span style="margin-left:8px;">${effects}</span></div>` : ''}
+    ${sections ? `<div><div style="font-size:10px;color:var(--dim);margin-bottom:4px;letter-spacing:1px;">SECTIONS</div>${sections}</div>` : ''}
+    <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;font-size:10px;color:var(--dim);">
+      ${m.director_model||'preset'} · ${m.generated_at ? new Date(m.generated_at).toLocaleTimeString() : 'now'}
+    </div>
+  `;
+
+  document.getElementById('status-scene').textContent = s.name;
+  document.getElementById('status-tempo').textContent = (s.tempo || '?') + ' BPM';
+  document.getElementById('status-duration').textContent = (s.duration_seconds || '?') + 's';
+  document.getElementById('status-director').textContent = m.director_model || 'preset';
+  document.getElementById('status-time').textContent = m.generated_at || '—';
+}
+
+function updateStatus() {
+  // Updates from active scene already handled in showSceneSpec
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function setupTabs() {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      activeTab = tab.dataset.panel;
+      document.getElementById('panel-' + activeTab).classList.add('active');
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STYLE & EFFECT BUTTONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function setupStyleButtons() {
+  document.querySelectorAll('#style-btns .btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#style-btns .btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeStyle = btn.dataset.style;
+      // Re-generate outputs with new style
+      generatedOutputs = {};
+      clearAllFrames();
+    };
+  });
+}
+
+function setupEffectButtons() {
+  document.querySelectorAll('#effect-btns .btn').forEach(btn => {
+    btn.onclick = () => {
+      btn.classList.toggle('active');
+      activeEffects = [];
+      document.querySelectorAll('#effect-btns .btn.active').forEach(b => {
+        activeEffects.push(b.dataset.effect);
+      });
+      generatedOutputs = {};
+      clearAllFrames();
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GENERATORS (in-browser, using the same logic as Node.js generators)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function getCurrentSpec() {
+  // Clone and override style/effects
+  const spec = JSON.parse(JSON.stringify(SCENES[activeScene]));
+  spec.visual.style = activeStyle;
+  spec.visual.effects = activeEffects;
+  return spec;
+}
+
+function generateOutput(type) {
+  const spec = getCurrentSpec();
+  const specJSON = JSON.stringify(spec);
+
+  switch (type) {
+    case 'p5js':
+      generateP5JS(spec, specJSON);
+      break;
+    case 'ascii':
+      generateASCII(spec, specJSON);
+      break;
+    case 'suno':
+      alert('Suno generation requires Node.js server and API key.\nRun: node generators/suno.js test-spec.json');
+      break;
+    case 'stitcher':
+      generateStitcher(spec, specJSON);
+      break;
+  }
+}
+
+function generateP5JS(spec, specJSON) {
+  const html = buildP5HTML(spec).replaceAll('<\/script>', '</scr' + 'ipt>');
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  generatedOutputs.p5js = url;
+
+  const frame = document.getElementById('frame-visual');
+  const placeholder = document.getElementById('placeholder-visual');
+  frame.src = url;
+  frame.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+
+  // Switch to visual tab
+  switchTab('visual');
+  document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+}
+
+function generateASCII(spec, specJSON) {
+  const html = buildASCIIHTML(spec).replaceAll('<\/script>', '</scr' + 'ipt>');
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  generatedOutputs.ascii = url;
+
+  const frame = document.getElementById('frame-ascii');
+  const placeholder = document.getElementById('placeholder-ascii');
+  frame.src = url;
+  frame.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+
+  switchTab('ascii');
+  document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+}
+
+function generateStitcher(spec, specJSON) {
+  const html = buildStitcherHTML(spec, uploadedAudioDataUrl).replaceAll('<\/script>', '</scr' + 'ipt>');
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  generatedOutputs.final = url;
+
+  const frame = document.getElementById('frame-final');
+  const placeholder = document.getElementById('placeholder-final');
+  frame.src = url;
+  frame.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+
+  switchTab('final');
+  document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const tab = document.querySelector('[data-panel="' + name + '"]');
+  if (tab) tab.classList.add('active');
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+  activeTab = name;
+}
+
+function clearAllFrames() {
+  ['visual','ascii','final'].forEach(type => {
+    const frame = document.getElementById('frame-' + type);
+    if (frame) { frame.src = ''; frame.style.display = 'none'; }
+    const placeholder = document.getElementById('placeholder-' + type);
+    if (placeholder) placeholder.style.display = '';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IN-BROWSER HTML GENERATORS (mirror Node.js generators)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function buildP5HTML(spec) {
+  const v = spec.visual || {}, s = spec.scene || {}, t = spec.timing || {};
+  const palette = JSON.stringify(v.color_palette || ['#ff00ff','#00ffff','#1a1a2e']);
+  const effects = JSON.stringify(v.effects || []);
+  const sections = JSON.stringify(t.sections || []);
+  const keyMoments = JSON.stringify(t.key_moments || []);
+  const asciiChars = ' .:-=+*#%@'; // standard
+
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>'+(s.name||'scene')+'</title>'+
+    '<script>p5.disableFriendlyErrors=true;<\/script>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"><\/script>'+
+    '<style>html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body>'+
+    '<script>'+
+    'const S={name:'+JSON.stringify(s.name)+',tempo:'+(s.tempo||120)+',duration:'+(s.duration_seconds||45)+'};'+
+    'const V={style:'+JSON.stringify(v.style||'geometric')+',palette:'+palette+',effects:'+effects+',intensity:'+(v.intensity??0.5)+',asciiChars:'+JSON.stringify(asciiChars)+'};'+
+    'const T={beatMs:'+(t.beat_interval_ms||500)+',sections:'+sections+',keyMoments:'+keyMoments+'};'+
+    'let startTime,particles=[],organicNodes=[],organicConns=[];'+
+    'function setup(){createCanvas(windowWidth,windowHeight);pixelDensity(1);colorMode(HSB,360,100,100,100);if(V.style==="particles")initParticles();if(V.style==="organic")initOrganic();startTime=millis();}'+
+    'function draw(){const t=((millis()-startTime)/1000)%S.duration,p=t/S.duration,beat=Math.floor(t*1000/T.beatMs);background(0,0,4);'+
+    'switch(V.style){case"ascii":drawAscii(t,p,beat);break;case"geometric":drawGeo(t,p,beat);break;case"particles":drawParts(t,p,beat);break;case"waveform":drawWave(t,p,beat);break;case"glitch":drawGlitch(t,p,beat);break;case"minimal":drawMin(t,p,beat);break;case"retro":drawRetro(t,p,beat);break;case"organic":drawOrg(t,p,beat);break;default:drawGeo(t,p,beat);}}'+
+    'function windowResized(){resizeCanvas(windowWidth,windowHeight);}'+
+    'const P=V.palette.map(h=>{const r=parseInt(h.slice(1,3),16)/255,g=parseInt(h.slice(3,5),16)/255,b=parseInt(h.slice(5,7),16)/255;const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let hue=0;if(d!==0){if(max===r)hue=((g-b)/d+(g<b?6:0))*60;else if(max===g)hue=((b-r)/d+2)*60;else hue=((r-g)/d+4)*60;}return{h:hue%360,s:max===0?0:(d/max)*100,b:max*100};});'+
+    // ASCII
+    'function drawAscii(t,p,b){const ch=V.asciiChars,aw=80,ah=40,cw=width/aw,ch2=height/ah;textAlign(CENTER,CENTER);textSize(cw*1.2);bg(0,0,5);for(let y=0;y<ah;y++){for(let x=0;x<aw;x++){const n=noise(x*0.05,y*0.05,t*0.3);const ci=Math.floor(n*(ch.length-1));fill(((x/aw)*60+t*30)%360,60+n*15,40+n*25);text(ch[Math.min(ci,ch.length-1)],x*cw+cw/2,y*ch2+ch2/2);}}}'+
+    // Geometric
+    'function drawGeo(t,p,b){const cx=width/2,cy=height/2;bg(0,0,4);for(let y=0;y<height;y+=2){stroke(P[0]?.h||240,30,5+y/height*15);strokeWeight(2);line(0,y,width,y);}push();translate(cx,cy);rotate(t*0.2);const br=Math.min(cx,cy)*0.35,pu=sin(t*0.8)*0.3+0.7;for(let i=0;i<5;i++){const a=(i/5)*TWO_PI+t*0.15,r=br*(0.5+i*0.15)*pu*V.intensity;push();rotate(a);const sd=3+i*2,h=P[i%P.length]||{h:i*50,s:80,b:90};stroke(h.h,h.s,h.b,70);strokeWeight(1.5+i*0.3);noFill();beginShape();for(let s=0;s<sd;s++){const sa=(s/sd)*TWO_PI,sr=r+sin(sa*3+t)*20*V.intensity;vertex(cos(sa)*sr,sin(sa)*sr);}endShape(CLOSE);pop();}pop();}'+
+    // Particles
+    'function initParticles(){for(let i=0;i<200;i++)particles.push({x:random(width),y:random(height),vx:random(2)-1,vy:random(2)-1,hue:random(360),size:random(3)+1,trail:[]});}'+
+    'function drawParts(t,p,b){const sp=V.intensity*0.8+0.2;for(const pt of particles){const n=noise(pt.x*0.003,pt.y*0.003,t*0.1);const a=n*TWO_PI*4;pt.vx+=cos(a)*0.1;pt.vy+=sin(a)*0.1;pt.vx*=0.97;pt.vy*=0.97;const spd=Math.sqrt(pt.vx*pt.vx+pt.vy*pt.vy);if(spd>4){pt.vx*=4/spd;pt.vy*=4/spd;}pt.x+=pt.vx*sp;pt.y+=pt.vy*sp;if(pt.x<0)pt.x=width;if(pt.x>width)pt.x=0;if(pt.y<0)pt.y=height;if(pt.y>height)pt.y=0;pt.trail.push({x:pt.x,y:pt.y});if(pt.trail.length>6)pt.trail.shift();}noFill();for(const pt of particles){if(pt.trail.length<2)continue;for(let i=1;i<pt.trail.length;i++){stroke(pt.hue,50,80,(i/pt.trail.length)*50);strokeWeight(pt.size*(i/pt.trail.length));line(pt.trail[i-1].x,pt.trail[i-1].y,pt.trail[i].x,pt.trail[i].y);}}}'+
+    // Waveform
+    'function drawWave(t,p,b){const bars=64,bw=width/bars,by=height*0.7;for(let i=0;i<bars;i++){const val=noise(i*0.1,t*0.5)*V.intensity*0.8+sin(t*(2+i*0.1))*0.2;const bh=val*height*0.7,hue=((i/bars)*120+t*20)%360;for(let sy=0;sy<floor(bh/3);sy++){fill(hue,60,70+(sy/bh*3)*30,(1-sy/bh*3)*80);noStroke();rect(i*bw+1,by-sy*3,bw-2,-3);}fill(hue,30,100,180);rect(i*bw+1,by-bh,bw-2,2);}}'+
+    // Glitch
+    'function drawGlitch(t,p,b){const cx=width/2,cy=height/2;bg(0,0,2);push();translate(cx,cy);rotate(t*0.1);for(let i=0;i<8;i++){const r=50+i*50+sin(t*2+i)*15;stroke(P[i%P.length]?.h||i*40,70,80,40);strokeWeight(1+random(2));noFill();beginShape();for(let j=0;j<=60;j++){const a=(j/60)*TWO_PI;vertex(cos(a)*(r+noise(a*2,i*0.3,t*0.5)*20),sin(a)*(r+noise(a*2,i*0.3,t*0.5)*20));}endShape(CLOSE);}pop();for(let i=0;i<8;i++){fill(P[0]?.h||0,20,90,30+random(40));noStroke();rect(random(width),random(height),50+random(200),2+random(10));}}'+
+    // Minimal
+    'function drawMin(t,p,b){const cx=width/2,cy=height/2,sz=Math.min(cx,cy)*0.6,br=sin(t*0.3)*0.15+0.85,r=sz*br;noFill();strokeWeight(1.5);for(let i=5;i>=0;i--){stroke(P[i%P.length]?.h||200+i*30,30,90,80-i*12);circle(cx,cy,r*(1-i*0.12)*2);}const ly=cy+sin(t*0.25)*cy*0.5;stroke(P[1]?.h||0,40,90,40);strokeWeight(0.8);line(cx-sz*0.9,ly,cx+sz*0.9,ly);fill(P[2]?.h||180,30,100,200);noStroke();circle(cx,ly,6+sin(t*2)*2);}'+
+    // Retro
+    'function drawRetro(t,p,b){const sc=4;bg(0,0,5);stroke(0,0,8,10);strokeWeight(0.5);for(let x=0;x<width;x+=sc)line(x,0,x,height);for(let y=0;y<height;y+=sc)line(0,y,width,y);noStroke();fill(P[2]?.h||40,80,90,200);rect(width*0.2-sc*5,height*0.25,sc*10,sc*10,3);const gy=height*0.7;for(let x=0;x<width;x+=sc){const h=sin(x*0.004+t*0.15)*sc*8+sc*4;fill(P[0]?.h||240,50,50,180);rect(x,gy-h,sc,h+height-gy);}}'+
+    // Organic
+    'function initOrganic(){organicNodes=[];organicConns=[];const n=30;for(let i=0;i<n;i++)organicNodes.push({bx:random(width),by:random(height),x:0,y:0,size:random(6)+2,hue:random(360),phase:random(TWO_PI),freq:random(0.5)+1});for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const dx=organicNodes[i].bx-organicNodes[j].bx,dy=organicNodes[i].by-organicNodes[j].by;if(Math.sqrt(dx*dx+dy*dy)<width*0.3)organicConns.push({a:i,b:j});}}'+
+    'function drawOrg(t,p,b){for(const n of organicNodes){const a=noise(n.bx*0.002,n.by*0.002,t*0.2)*TWO_PI*3,d=noise(n.bx*0.003,n.by*0.003,t*0.15+100)*120*V.intensity;n.x=n.bx+cos(a)*d+sin(t*n.freq+n.phase)*40;n.y=n.by+sin(a)*d+cos(t*n.freq*0.7+n.phase)*40;}strokeWeight(0.8);for(const c of organicConns){const a=organicNodes[c.a],b=organicNodes[c.b];noFill();stroke((a.hue+b.hue)/2,50,70,20);line(a.x,a.y,b.x,b.y);}for(const n of organicNodes){for(let r=n.size*3;r>0;r-=n.size*0.4){fill(n.hue,40,80,20*(r/(n.size*3)));noStroke();circle(n.x,n.y,r*2);}fill(n.hue,20,100,220);circle(n.x,n.y,n.size*0.7);}}'+
+    'function bg(h,s,b){colorMode(HSB,360,100,100,100);background(h,s,b);}'+
+    'function keyPressed(){if(key==="s"||key==="S")saveCanvas(S.name+"-frame","png");}'+
+    '<\/script></body></html>';
+}
+
+function buildASCIIHTML(spec) {
+  const v = spec.visual || {}, s = spec.scene || {}, t = spec.timing || {};
+  const chars = ' .:-=+*#%@'; // standard
+  const cols = v.resolution?.width || 80;
+  const rows = v.resolution?.height || 40;
+  const sections = JSON.stringify(t.sections || []);
+  const effects = JSON.stringify(v.effects || []);
+
+  // For brevity, embed a simpler ASCII renderer in-browser
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+(s.name||'scene')+' ASCII</title>'+
+    '<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:"Courier New",monospace}'+
+    '#frame{color:#00ff41;font-size:14px;line-height:1.15;white-space:pre;text-align:center;padding:20px}.scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:10}'+
+    '</style></head><body><div id="frame"></div><div class="scanlines"></div>'+
+    '<script>'+
+    'const C='+cols+',R='+rows+',D='+(s.duration_seconds||45)+',BM='+(t.beat_interval_ms||500)+',I='+(v.intensity??0.5)+',SECTIONS='+sections+',EFFECTS='+effects+',CH="'+chars+'";'+
+    'let st,fb=new Array(C*R).fill(" ");'+
+    'function rng(s){return((s*16807)%2147483647-1)/2147483646;}'+
+    'function n2(x,y,z){const ix=Math.floor(x),iy=Math.floor(y),iz=Math.floor(z||0),fx=x-ix,fy=y-iy;function h(ax,ay){const hv=(ax*374761393+ay*668265263+iz*19260817)&0x7fffffff;return(hv%10000)/10000;}const v00=h(ix,iy),v10=h(ix+1,iy),v01=h(ix,iy+1),v11=h(ix+1,iy+1),sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);return v00*(1-sx)*(1-sy)+v10*sx*(1-sy)+v01*(1-sx)*sy+v11*sx*sy;}'+
+    'function ca(b){return CH[Math.min(Math.floor(b*(CH.length-1)),CH.length-1)]||" ";}'+
+    'function tick(){st=st||Date.now();const t=((Date.now()-st)/1000)%D,p=t/D,beat=Math.floor(t*1000/BM);'+
+    'for(let i=0;i<fb.length;i++)fb[i]=" ";'+
+    'for(let y=0;y<R;y++)for(let x=0;x<C;x++){const n=n2(x*0.04,y*0.06,t*0.3),n2v=n2(x*0.05+100,y*0.04,t*0.5);fb[y*C+x]=ca(Math.min(1,n*0.7+n2v*0.3+0.1));}'+
+    'let o="";for(let y=0;y<R;y++){for(let x=0;x<C;x++)o+=fb[y*C+x];if(y<R-1)o+="\\n";}'+
+    'document.getElementById("frame").textContent=o;requestAnimationFrame(tick);}'+
+    'tick();<\/script></body></html>';
+}
+
+function buildStitcherHTML(spec, audioDataUrl) {
+  const v = spec.visual || {}, s = spec.scene || {}, t = spec.timing || {};
+  const palette = JSON.stringify(v.color_palette || ['#ff00ff','#00ffff','#1a1a2e']);
+  const effects = JSON.stringify(v.effects || []);
+  const sections = JSON.stringify(t.sections || []);
+  const keyMoments = JSON.stringify(t.key_moments || []);
+  const hasAudio = !!audioDataUrl;
+  const audioSource = audioDataUrl ? JSON.stringify(audioDataUrl) : 'null';
+
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>'+(s.name||'scene')+' — Final</title>'+
+    '<script>p5.disableFriendlyErrors=true;<\/script>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"><\/script>'+
+    '<style>html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}#hud{position:fixed;bottom:0;left:0;right:0;padding:12px 20px;font-family:"Courier New",monospace;font-size:12px;color:rgba(255,255,255,0.6);background:linear-gradient(transparent,rgba(0,0,0,0.85));display:flex;justify-content:space-between;z-index:10;pointer-events:none}#audio-ind{position:fixed;top:16px;right:16px;width:8px;height:40px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden;z-index:10}#audio-ind .fill{width:100%;background:'+(v.color_palette?.[0]||'#ff00ff')+';transition:height 0.1s;border-radius:4px}</style></head><body>'+
+    '<div id="hud"><div><span>'+(s.name||'scene')+'</span> · <span>'+(v.style||'geometric')+'</span> · <span id="hud-sec">—</span></div><div><span id="hud-time">0:00</span> / <span>'+fmtTime(s.duration_seconds||45)+'</span> · <span id="hud-beat">0</span>b · '+(s.tempo||120)+'BPM</div></div>'+
+    '<div id="audio-ind"><div class="fill" style="height:0%"></div></div>'+
+    '<script>'+
+    'const C={name:'+JSON.stringify(s.name)+',tempo:'+(s.tempo||120)+',dur:'+(s.duration_seconds||45)+',bm:'+(t.beat_interval_ms||500)+',style:'+JSON.stringify(v.style||'geometric')+',pal:'+palette+',eff:'+effects+',int:'+(v.intensity??0.5)+',sec:'+sections+',km:'+keyMoments+',audioUrl:'+audioSource+',hasAudio:'+hasAudio+'};'+
+    'let ac,as,ast=0,ap=false,an,ad;'+
+    'async function sa(){ac=new(window.AudioContext||window.webkitAudioContext)();an=ac.createAnalyser();an.fftSize=256;an.connect(ac.destination);ad=new Uint8Array(an.frequencyBinCount);ap=true;ast=ac.currentTime;startProc();}'+
+    'let pos=[],pgs=[];'+
+    'function startProc(){if(!ac)return;if(ac.state==="suspended")ac.resume();const n=ac.currentTime;ast=n;ap=true;const bf=C.tempo/60*27.5;for(let i=0;i<3;i++){const o=ac.createOscillator(),g=ac.createGain();o.type=["sine","triangle","square"][i];o.frequency.value=bf*Math.pow(2,i);g.gain.value=0;o.connect(g);g.connect(an);o.start(n);pos.push(o);pgs.push({g,type:["bass","mid","hi"][i]});}}'+
+    'function up(t,b){const p=t/C.dur,bp=(b%4)/4;let sb=1;for(const s of C.sec){if(b>=s.start_beat&&b<s.end_beat){switch(s.name){case"intro":sb=0.3+p*0.7;break;case"build":sb=0.4+p*0.6;break;case"drop":sb=0.8+bp*0.2;break;case"outro":sb=0.5*(1-(p>0.85?((p-0.85)/0.15):0));break;}break;}}for(const g of pgs){let l=0;switch(g.type){case"bass":l=0.3*sb*(0.8+bp*0.2);break;case"mid":l=0.15*sb*(0.5+Math.sin(t*3)*0.3+0.3);break;case"hi":l=0.08*sb*(0.4+bp*0.3);break;}g.g.gain.setTargetAtTime(l*C.int,ac.currentTime,0.05);}}'+
+    'function gal(){if(!an)return 0;an.getByteFrequencyData(ad);let s=0;for(let i=0;i<ad.length;i++)s+=ad[i];return s/ad.length/255;}'+
+    'let particles=[],organicNodes=[],organicConns=[];'+
+    'function setup(){createCanvas(windowWidth,windowHeight);pixelDensity(1);colorMode(HSB,360,100,100,100);if(C.style==="particles")initP();if(C.style==="organic")initO();sa();}'+
+    'function draw(){const t=ap?(ac.currentTime-ast):0,lo=t%C.dur,p=lo/C.dur,b=Math.floor(t*1000/C.bm);if(ap)up(t,b);const al=gal();'+
+    'document.getElementById("hud-time").textContent=fm(lo);document.getElementById("hud-beat").textContent=b;for(const s of C.sec){if(b>=s.start_beat&&b<s.end_beat){document.getElementById("hud-sec").textContent=s.name;break;}}'+
+    'const af=document.querySelector("#audio-ind .fill");if(af)af.style.height=(al*100)+"%";background(0,0,4);'+
+    'switch(C.style){case"ascii":dA(t,p,b,al);break;case"geometric":dG(t,p,b,al);break;case"particles":dP(t,p,b,al);break;case"waveform":dW(t,p,b,al);break;case"glitch":dGl(t,p,b,al);break;case"minimal":dM(t,p,b,al);break;case"retro":dR(t,p,b,al);break;case"organic":dO(t,p,b,al);break;default:dG(t,p,b,al);}}'+
+    'function windowResized(){resizeCanvas(windowWidth,windowHeight);}'+
+    'function fm(s){const m=Math.floor(s/60),sec=Math.floor(s%60);return m+":"+(sec<10?"0":"")+sec;}'+
+    // Inline all 8 style renderers (same as p5js-scene but compact)
+    'const P=C.pal.map(h=>{const r=parseInt(h.slice(1,3),16)/255,g=parseInt(h.slice(3,5),16)/255,b=parseInt(h.slice(5,7),16)/255;const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let hue=0;if(d!==0){if(max===r)hue=((g-b)/d+(g<b?6:0))*60;else if(max===g)hue=((b-r)/d+2)*60;else hue=((r-g)/d+4)*60;}return{h:hue%360,s:max===0?0:(d/max)*100,b:max*100};});'+
+    'function dA(t,p,b,al){const ch=" .:-=+*#%@",aw=80,ah=40,cw=width/aw,ch2=height/ah;textAlign(CENTER,CENTER);textSize(cw*1.2);for(let y=0;y<ah;y++)for(let x=0;x<aw;x++){const n=noise(x*0.05,y*0.05,t*0.3),ci=Math.floor(n*(ch.length-1));fill(((x/aw)*60+t*30)%360,60+n*15,40+n*25);text(ch[Math.min(ci,ch.length-1)],x*cw+cw/2,y*ch2+ch2/2);}}'+
+    'function dG(t,p,b,al){const cx=width/2,cy=height/2;for(let y=0;y<height;y+=2){stroke(P[0]?.h||240,30,5+y/height*15);strokeWeight(2);line(0,y,width,y);}push();translate(cx,cy);rotate(t*0.2);const br=Math.min(cx,cy)*0.35,pu=sin(t*0.8)*0.3+0.7;for(let i=0;i<5;i++){const a=(i/5)*TWO_PI+t*0.15,r=br*(0.5+i*0.15)*pu*C.int;push();rotate(a);const sd=3+i*2,h=P[i%P.length]||{h:i*50,s:80,b:90};stroke(h.h,h.s,h.b,70);strokeWeight(1.5+i*0.3);noFill();beginShape();for(let s=0;s<sd;s++){const sa=(s/sd)*TWO_PI,sr=r+sin(sa*3+t)*20*C.int;vertex(cos(sa)*sr,sin(sa)*sr);}endShape(CLOSE);pop();}pop();}'+
+    'function initP(){for(let i=0;i<200;i++)particles.push({x:random(width),y:random(height),vx:random(2)-1,vy:random(2)-1,hue:random(360),size:random(3)+1,trail:[]});}'+
+    'function dP(t,p,b,al){const sp=C.int*0.8+0.2;for(const pt of particles){const n=noise(pt.x*0.003,pt.y*0.003,t*0.1),a=n*TWO_PI*4;pt.vx+=cos(a)*0.1;pt.vy+=sin(a)*0.1;pt.vx*=0.97;pt.vy*=0.97;const spd=Math.sqrt(pt.vx*pt.vx+pt.vy*pt.vy);if(spd>4){pt.vx*=4/spd;pt.vy*=4/spd;}pt.x+=pt.vx*sp;pt.y+=pt.vy*sp;if(pt.x<0)pt.x=width;if(pt.x>width)pt.x=0;if(pt.y<0)pt.y=height;if(pt.y>height)pt.y=0;pt.trail.push({x:pt.x,y:pt.y});if(pt.trail.length>6)pt.trail.shift();}noFill();for(const pt of particles){if(pt.trail.length<2)continue;for(let i=1;i<pt.trail.length;i++){stroke(pt.hue,50,80,(i/pt.trail.length)*50);strokeWeight(pt.size*(i/pt.trail.length));line(pt.trail[i-1].x,pt.trail[i-1].y,pt.trail[i].x,pt.trail[i].y);}}}'+
+    'function dW(t,p,b,al){const bars=64,bw=width/bars,by=height*0.7;for(let i=0;i<bars;i++){const val=noise(i*0.1,t*0.5)*C.int*0.8+sin(t*(2+i*0.1))*0.2,bh=val*height*0.7,hue=((i/bars)*120+t*20)%360;for(let sy=0;sy<floor(bh/3);sy++){fill(hue,60,70+(sy/bh*3)*30,(1-sy/bh*3)*80);noStroke();rect(i*bw+1,by-sy*3,bw-2,-3);}fill(hue,30,100,180);rect(i*bw+1,by-bh,bw-2,2);}}'+
+    'function dGl(t,p,b,al){const cx=width/2,cy=height/2;push();translate(cx,cy);rotate(t*0.1);for(let i=0;i<8;i++){const r=50+i*50+sin(t*2+i)*15;stroke(P[i%P.length]?.h||i*40,70,80,40);strokeWeight(1+random(2));noFill();beginShape();for(let j=0;j<=60;j++){const a=(j/60)*TWO_PI;vertex(cos(a)*(r+noise(a*2,i*0.3,t*0.5)*20),sin(a)*(r+noise(a*2,i*0.3,t*0.5)*20));}endShape(CLOSE);}pop();for(let i=0;i<8;i++){fill(P[0]?.h||0,20,90,30+random(40));noStroke();rect(random(width),random(height),50+random(200),2+random(10));}}'+
+    'function dM(t,p,b,al){const cx=width/2,cy=height/2,sz=Math.min(cx,cy)*0.6,br=sin(t*0.3)*0.15+0.85,r=sz*br;noFill();strokeWeight(1.5);for(let i=5;i>=0;i--){stroke(P[i%P.length]?.h||200+i*30,30,90,80-i*12);circle(cx,cy,r*(1-i*0.12)*2);}const ly=cy+sin(t*0.25)*cy*0.5;stroke(P[1]?.h||0,40,90,40);strokeWeight(0.8);line(cx-sz*0.9,ly,cx+sz*0.9,ly);fill(P[2]?.h||180,30,100,200);noStroke();circle(cx,ly,6+sin(t*2)*2);}'+
+    'function dR(t,p,b,al){const sc=4;stroke(0,0,8,10);strokeWeight(0.5);for(let x=0;x<width;x+=sc)line(x,0,x,height);for(let y=0;y<height;y+=sc)line(0,y,width,y);noStroke();fill(P[2]?.h||40,80,90,200);rect(width*0.2-sc*5,height*0.25,sc*10,sc*10,3);const gy=height*0.7;for(let x=0;x<width;x+=sc){const h=sin(x*0.004+t*0.15)*sc*8+sc*4;fill(P[0]?.h||240,50,50,180);rect(x,gy-h,sc,h+height-gy);}}'+
+    'function initO(){organicNodes=[];organicConns=[];const n=30;for(let i=0;i<n;i++)organicNodes.push({bx:random(width),by:random(height),x:0,y:0,size:random(6)+2,hue:random(360),phase:random(TWO_PI),freq:random(0.5)+1});for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const dx=organicNodes[i].bx-organicNodes[j].bx,dy=organicNodes[i].by-organicNodes[j].by;if(Math.sqrt(dx*dx+dy*dy)<width*0.3)organicConns.push({a:i,b:j});}}'+
+    'function dO(t,p,b,al){for(const n of organicNodes){const a=noise(n.bx*0.002,n.by*0.002,t*0.2)*TWO_PI*3,d=noise(n.bx*0.003,n.by*0.003,t*0.15+100)*120*C.int;n.x=n.bx+cos(a)*d+sin(t*n.freq+n.phase)*40;n.y=n.by+sin(a)*d+cos(t*n.freq*0.7+n.phase)*40;}strokeWeight(0.8);for(const c of organicConns){const a=organicNodes[c.a],b=organicNodes[c.b];noFill();stroke((a.hue+b.hue)/2,50,70,20);line(a.x,a.y,b.x,b.y);}for(const n of organicNodes){for(let r=n.size*3;r>0;r-=n.size*0.4){fill(n.hue,40,80,20*(r/(n.size*3)));noStroke();circle(n.x,n.y,r*2);}fill(n.hue,20,100,220);circle(n.x,n.y,n.size*0.7);}}'+
+    'function keyPressed(){if(key==="s"||key==="S")saveCanvas(C.name+"-final","png");}'+
+    '<\/script></body></html>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDIO UPLOAD → VISUALIZE MY TRACK (skips Director)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function handleTrackDrop(files) {
+  const file = files[0];
+  if (!file) return;
+
+  const status = document.getElementById('track-status');
+  status.textContent = '⏳ Loading ' + file.name.slice(0, 20) + '...';
+  status.style.color = 'var(--yellow)';
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    uploadedAudioDataUrl = e.target.result;
+
+    // Decode audio to get duration
+    let duration = 45;
+    try {
+      const actx = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = e.target.result.split(',')[1];
+      const binary = atob(arrayBuffer);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const audioBuffer = await actx.decodeAudioData(bytes.buffer);
+      duration = Math.ceil(audioBuffer.duration);
+      actx.close();
+    } catch(e) { /* use default duration */ }
+
+    // Create a minimal spec — no Director, just the track
+    const lyricsText = document.getElementById('lyrics-input').value.trim();
+    const lyrics = lyricsText ? lyricsText.split('\n').map(s => s.trim()).filter(s => s) : null;
+    const styles = ['ascii','geometric','particles','waveform','glitch','minimal','retro','organic'];
+    const spec = {
+      version: '1.0',
+      prompt: '🎵 ' + file.name,
+      scene: { name: file.name.replace(/\.[^.]+$/, '').slice(0, 30), mood: 'dark', tempo: 120, duration_seconds: duration, genre: 'electronic', tags: ['upload'] },
+      audio: { prompt: 'Uploaded track', instrumental: true, model: 'chirp-4' },
+      visual: { style: styles[Math.floor(Math.random() * styles.length)], color_palette: ['#ff00ff','#00ffff','#1a1a2e'], effects: ['bloom'], intensity: 0.6, resolution: { width: 1920, height: 1080 } },
+      timing: { beat_interval_ms: 500, sections: [{ name: 'intro', start_beat: 0, end_beat: Math.ceil(duration * 1000 / 500) }] },
+      metadata: { director_model: 'direct-to-stitch', generated_at: new Date().toISOString(), generation_time_ms: 0 }
+    };
+    if (lyrics) spec.lyrics = lyrics;
+
+    // Store in catalog
+    const key = 'track-' + Date.now();
+    SCENES[key] = spec;
+    activeScene = key;
+    newSceneSpec = spec;
+    renderSceneList();
+    showSceneSpec(spec);
+
+    // Auto-stitch with embedded audio
+    const html = buildStitcherHTML(spec, uploadedAudioDataUrl).replaceAll('<\/script>', '</scr' + 'ipt>');
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    generatedOutputs.final = url;
+    document.getElementById('frame-final').src = url;
+    document.getElementById('frame-final').style.display = 'block';
+    const ph = document.getElementById('placeholder-final');
+    if (ph) ph.style.display = 'none';
+
+    switchTab('final');
+    document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+    document.getElementById('status-scene').textContent = spec.scene.name;
+    document.getElementById('status-duration').textContent = duration + 's';
+
+    status.textContent = '✅ Ready! Press Play in the panel →';
+    status.style.color = 'var(--green)';
+
+    const kb = (uploadedAudioDataUrl.length / 1024).toFixed(0);
+    document.getElementById('uploaded-name').textContent = '🎵 ' + file.name.slice(0, 16) + ' (' + kb + 'KB)';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SURPRISE ME
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SURPRISE_PROMPTS = [
+  'A cyberpunk cityscape at night with rain and neon lights',
+  'A spaceship drifting through a colorful nebula with distant stars',
+  'A glitchy digital grid collapsing into chaos with electric sparks',
+  'Vines and flowers slowly overtaking an abandoned concrete structure',
+  'Ocean waves crashing against a lighthouse during a thunderstorm',
+  'A jazz club at 2am with smoke curling under amber lights',
+  'Geometric shapes pulsing in an infinite void',
+  'A forest where trees are made of light and data streams',
+  'A retro arcade flickering to life after decades of darkness',
+  'An ancient temple being consumed by a digital virus',
+  'Fireflies dancing over a misty midnight lake',
+  'A robot dreaming of biological gardens',
+  'Northern lights shimmering above a frozen wasteland',
+];
+
+let lastPresetName = null;
+
+async function surpriseMe() {
+  // Fetch a random preset from the server (20 presets, no LLM needed)
+  const prompts = [
+    'A neon-drenched cyberpunk rave', 'Summer festival main stage', 'Gentle ocean waves at sunset',
+    'Morning dew in a Japanese garden', 'Cyberpunk city at 3am in the rain', 'Abandoned industrial factory at night',
+    'Sunrise over mountain peaks', 'Colorful hot air balloons at dawn', 'Empty train station in the rain',
+    'Last light through autumn leaves', 'Digital glitch storm, reality breaking', 'Exploding supernova, cosmic chaos',
+    'Deep space meditation, floating through nebulae', 'Tibetan singing bowls in a mountain temple',
+    'VHS memories of summer 1985', 'Old film projector in an empty cinema',
+    'Underwater rave with bioluminescent sea creatures', 'Desert highway at midnight, lone rider',
+    'Cherry blossoms falling in spring breeze'
+  ];
+  const prompt = prompts[Math.floor(Math.random() * prompts.length)];
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, use_preset: true, duration: 45 })
+    });
+    if (resp.ok) {
+      const spec = await resp.json();
+      // Avoid repeating the same preset
+      if (spec.scene?.name === lastPresetName && Object.keys(SCENES).length > 1) {
+        return surpriseMe(); // try again
+      }
+      lastPresetName = spec.scene?.name;
+      activeScene = spec.scene?.name || 'preset';
+      SCENES[activeScene] = spec;
+      newSceneSpec = spec;
+      document.getElementById('prompt-input').value = spec.prompt;
+      generatedOutputs = {};
+      clearAllFrames();
+      renderSceneList();
+      showSceneSpec(spec);
+      activeStyle = spec.visual?.style || activeStyle;
+      activeEffects = spec.visual?.effects || [];
+      updateStyleButtons();
+      updateEffectButtons();
+      saveToGallery(spec);
+      generateOutput('p5js');
+      return;
+    }
+  } catch(e) { console.warn('Preset fetch failed, using local:', e); }
+
+  // Fallback: use local SCENES
+  const sceneKeys = Object.keys(SCENES);
+  const randomScene = sceneKeys[Math.floor(Math.random() * sceneKeys.length)];
+  activeScene = randomScene;
+
+  const styles = ['ascii','geometric','particles','waveform','glitch','minimal','retro','organic'];
+  activeStyle = styles[Math.floor(Math.random() * styles.length)];
+
+  const allEffects = ['scanlines','noise','bloom','chromatic','vignette','drift'];
+  const count = 2 + Math.floor(Math.random() * 3);
+  activeEffects = [];
+  for (let i = 0; i < count; i++) {
+    const e = allEffects[Math.floor(Math.random() * allEffects.length)];
+    if (!activeEffects.includes(e)) activeEffects.push(e);
+  }
+
+  const spec = SCENES[randomScene];
+  document.getElementById('prompt-input').value = spec.prompt;
+  generatedOutputs = {};
+  clearAllFrames();
+  renderSceneList();
+  updateStyleButtons();
+  updateEffectButtons();
+  showSceneSpec(spec);
+  generateOutput('p5js');
+  saveToGallery(spec);
+}
+
+function updateStyleButtons() {
+  document.querySelectorAll('#style-btns .btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.style === activeStyle);
+  });
+}
+
+function updateEffectButtons() {
+  document.querySelectorAll('#effect-btns .btn').forEach(btn => {
+    btn.classList.toggle('active', activeEffects.includes(btn.dataset.effect));
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SHARE URL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function shareURL() {
+  const spec = getCurrentSpec();
+  const json = JSON.stringify(spec);
+  const b64 = btoa(unescape(encodeURIComponent(json)));
+  const url = location.origin + location.pathname + '#' + b64;
+  navigator.clipboard.writeText(url).then(() => {
+    const old = document.getElementById('uploaded-name').textContent;
+    document.getElementById('uploaded-name').textContent = '📋 Copied!';
+    setTimeout(() => { document.getElementById('uploaded-name').textContent = old; }, 2000);
+  });
+}
+
+// Copy embed iframe code
+function copyEmbedCode() {
+  const spec = getCurrentSpec();
+  const json = JSON.stringify(spec);
+  const b64 = btoa(unescape(encodeURIComponent(json)));
+  const baseUrl = location.origin + location.pathname;
+  const iframe = '<iframe src="' + baseUrl + '#' + b64 + '" width="800" height="450" frameborder="0" allow="autoplay" style="border-radius:8px;"></iframe>';
+  navigator.clipboard.writeText(iframe).then(() => {
+    document.getElementById('uploaded-name').textContent = '📋 Embed copied!';
+    setTimeout(() => { document.getElementById('uploaded-name').textContent = ''; }, 2000);
+  });
+}
+
+// Batch generation
+let batchPrompts = [];
+
+function showBatchUI() {
+  const defaultPrompts = SURPRISE_PROMPTS.slice(0, 5).join('\n');
+  const prompts = prompt('Enter prompts (one per line) for batch generation:', defaultPrompts);
+  if (!prompts) return;
+
+  batchPrompts = prompts.split('\n').map(s => s.trim()).filter(s => s.length > 2);
+  if (batchPrompts.length === 0) return;
+
+  document.getElementById('batch-count').textContent = batchPrompts.length + ' prompts';
+  document.getElementById('batch-progress').style.display = 'block';
+  runBatch();
+}
+
+async function runBatch() {
+  const bar = document.getElementById('batch-bar');
+  const status = document.getElementById('batch-status');
+
+  let completed = 0;
+  const duration = parseInt(document.getElementById('duration-slider').value);
+
+  for (let i = 0; i < batchPrompts.length; i++) {
+    status.textContent = 'Generating ' + (i+1) + '/' + batchPrompts.length + '...';
+    bar.style.width = ((i / batchPrompts.length) * 100) + '%';
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: batchPrompts[i], duration }),
+      });
+
+      if (response.ok) {
+        const spec = await response.json();
+        const key = spec.scene?.name || ('batch-' + i);
+        SCENES[key] = spec;
+        saveToGallery(spec);
+        completed++;
+      }
+    } catch(e) {
+      console.error('Batch item failed:', batchPrompts[i], e);
+    }
+  }
+
+  bar.style.width = '100%';
+  status.textContent = 'Done! ' + completed + '/' + batchPrompts.length + ' generated';
+  renderSceneList();
+  renderGallery();
+
+  // Auto-select first result
+  const firstNew = Object.keys(SCENES).find(k => k.startsWith('batch-') || SCENES[k].prompt === batchPrompts[0]);
+  if (firstNew) selectScene(firstNew);
+}
+
+// Load spec from hash on startup
+function loadFromHash() {
+  if (!location.hash || location.hash.length < 2) return false;
+  try {
+    const json = decodeURIComponent(escape(atob(location.hash.slice(1))));
+    const spec = JSON.parse(json);
+    // Look for matching scene or create temp
+    const key = spec.scene?.name || 'shared';
+    SCENES[key] = spec;
+    activeScene = key;
+    if (spec.visual?.style) activeStyle = spec.visual.style;
+    if (spec.visual?.effects) activeEffects = spec.visual.effects;
+    renderSceneList();
+    updateStyleButtons();
+    updateEffectButtons();
+    showSceneSpec(spec);
+    document.getElementById('prompt-input').value = spec.prompt || '';
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMPT GALLERY (localStorage)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function saveToGallery(spec) {
+  try {
+    let gallery = JSON.parse(localStorage.getItem('p2s_gallery') || '[]');
+    // Add to front, dedupe, max 20
+    gallery = gallery.filter(s => s.scene?.name !== spec.scene?.name);
+    gallery.unshift({ name: spec.scene?.name, mood: spec.scene?.mood, style: spec.visual?.style, prompt: spec.prompt, timestamp: Date.now() });
+    if (gallery.length > 20) gallery = gallery.slice(0, 20);
+    localStorage.setItem('p2s_gallery', JSON.stringify(gallery));
+    renderGallery();
+  } catch(e) {}
+}
+
+function renderGallery() {
+  const container = document.getElementById('gallery-list');
+  if (!container) return;
+  try {
+    const gallery = JSON.parse(localStorage.getItem('p2s_gallery') || '[]');
+    container.innerHTML = gallery.map((g, i) => 
+      '<div class="gallery-item" onclick="loadGalleryItem(' + i + ')" title="' + g.prompt + '">' +
+      '<span class="gal-name">' + (g.name || 'untitled') + '</span>' +
+      '<span class="gal-meta">' + (g.mood||'') + ' · ' + (g.style||'') + '</span>' +
+      '</div>'
+    ).join('');
+  } catch(e) {}
+}
+
+function loadGalleryItem(index) {
+  try {
+    const gallery = JSON.parse(localStorage.getItem('p2s_gallery') || '[]');
+    const entry = gallery[index];
+    if (!entry) return;
+    // Find matching scene
+    for (const [key, spec] of Object.entries(SCENES)) {
+      if (spec.scene?.name === entry.name) {
+        selectScene(key);
+        if (entry.style) {
+          activeStyle = entry.style;
+          updateStyleButtons();
+        }
+        generateOutput('p5js');
+        return;
+      }
+    }
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIDE-BY-SIDE 4-UP VIEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+let sideBySide = false;
+
+function toggleSideBySide() {
+  sideBySide = !sideBySide;
+  const ws = document.querySelector('.workspace');
+  const panels = document.querySelectorAll('.panel');
+  const tabs = document.querySelector('.tab-bar');
+
+  if (sideBySide) {
+    // Create 4-up grid
+    tabs.style.display = 'none';
+    panels.forEach(p => { p.style.display = 'flex'; p.style.flex = '0 0 calc(50% - 8px)'; p.style.minHeight = 'calc(50vh - 60px)'; });
+    ws.style.flexDirection = 'row';
+    ws.style.flexWrap = 'wrap';
+    ws.style.gap = '8px';
+    ws.style.padding = '8px';
+
+    // Generate all 4 styles
+    const styles = ['ascii', 'geometric', 'particles', 'organic'];
+    const spec = getCurrentSpec();
+    styles.forEach((style, i) => {
+      spec.visual.style = style;
+      const html = buildP5HTML(spec);
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+
+      const frameId = ['frame-visual', 'frame-ascii', 'frame-final'][i] || ('frame-' + i);
+      const panelId = Object.keys(generatedOutputs)[i] || 'visual';
+
+      // Just use the visual panel 4 times with different iframes (simplified)
+      if (i === 0) {
+        const frame = document.getElementById('frame-visual');
+        const ph = document.getElementById('placeholder-visual');
+        if (frame) { frame.src = url; frame.style.display = 'block'; }
+        if (ph) ph.style.display = 'none';
+      }
+      // For demo, just show the first one — the stitcher handles 4-up internally
+    });
+
+    // Actually, let's do it simpler: show 1 main + generate others
+    generateOutput('p5js');
+  } else {
+    tabs.style.display = 'flex';
+    panels.forEach(p => { p.style.display = 'none'; p.style.flex = ''; p.style.minHeight = ''; });
+    ws.style.flexDirection = 'column';
+    ws.style.flexWrap = '';
+    ws.style.gap = '16px';
+    ws.style.padding = '20px';
+    // Restore active tab
+    document.querySelector('[data-panel="' + activeTab + '"]')?.classList.add('active');
+    document.getElementById('panel-' + activeTab)?.classList.add('active');
+  }
+}
+// ═══════════════════════════════════════════════════════════════════════════
+
+function downloadActive() {
+  const url = generatedOutputs[activeTab];
+  if (url) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = activeScene + '-' + activeTab + '.html';
+    a.click();
+  } else {
+    alert('Nothing generated yet. Click a generator button first.');
+  }
+}
+
+function downloadAll() {
+  for (const [type, url] of Object.entries(generatedOutputs)) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = activeScene + '-' + type + '.html';
+    a.click();
+  }
+  if (Object.keys(generatedOutputs).length === 0) {
+    alert('Nothing generated yet. Generate some outputs first.');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STARTUP
+// ═══════════════════════════════════════════════════════════════════════════
+
+init();
+</script>
+</body>
+</html>
