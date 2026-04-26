@@ -101,6 +101,28 @@ try {
   console.warn('Enhanced template not available:', e.message);
 }
 
+// ─── Procedural Audio generator ───────────────────────────────────────────
+
+let proceduralAudio = null;
+try {
+  proceduralAudio = require('./generators/procedural-audio.js');
+  console.log('✓ Procedural audio generator loaded');
+} catch(e) {
+  console.warn('Procedural audio generator not available:', e.message);
+}
+
+// ─── Enhanced ASCII template ──────────────────────────────────────────────
+
+let asciiEnhancedTemplate = null;
+try {
+  asciiEnhancedTemplate = require('fs').readFileSync(
+    path.join(ROOT, 'generators', 'ascii-enhanced.html'), 'utf8'
+  );
+  console.log('✓ Enhanced ASCII template loaded (' + (asciiEnhancedTemplate.length/1024).toFixed(1) + 'KB)');
+} catch(e) {
+  console.warn('Enhanced ASCII template not available:', e.message);
+}
+
 // ─── MIME types ────────────────────────────────────────────────────────────
 
 const MIME = {
@@ -168,6 +190,12 @@ async function handleRequest(req, res) {
   }
   if (url.pathname === '/api/generate/ascii' && method === 'POST') {
     return handleGenerateOutput(req, res, 'ascii');
+  }
+  if (url.pathname === '/api/generate/ascii-enhanced' && method === 'POST') {
+    return handleASCIIEnhanced(req, res);
+  }
+  if (url.pathname === '/api/generate/procedural-audio' && method === 'POST') {
+    return handleProceduralAudio(req, res);
   }
   if (url.pathname === '/api/generate/stitch' && method === 'POST') {
     return handleGenerateOutput(req, res, 'stitch');
@@ -251,7 +279,7 @@ async function handleGenerateP5JSEnhanced(req, res) {
   const spec = body.spec || body;
 
   // Inject spec into template via body data-spec attribute
-  const specJSON = JSON.stringify(spec).replace(/'/g, "\\'");
+    const specJSON = JSON.stringify(spec).replace(/'/g, "\\'");
   const html = enhancedTemplate.replace(
     '<body>',
     '<body data-spec=\'' + specJSON + '\'>'
@@ -259,6 +287,48 @@ async function handleGenerateP5JSEnhanced(req, res) {
 
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
+}
+
+// ── Enhanced ASCII handler ──────────────────────────────────────────────────
+
+function handleASCIIEnhanced(req, res) {
+  if (!asciiEnhancedTemplate) {
+    return jsonResponse(res, 500, { error: 'Enhanced ASCII template not available' });
+  }
+
+  readBody(req).then(body => {
+    const spec = body.spec || body;
+    const specJSON = JSON.stringify(spec).replace(/'/g, "\\'");
+    const html = asciiEnhancedTemplate.replace(
+      "<body data-spec='{}'>",
+      "<body data-spec='" + specJSON + "'>"
+    );
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  });
+}
+
+// ── Procedural Audio handler ────────────────────────────────────────────────
+
+function handleProceduralAudio(req, res) {
+  if (!proceduralAudio) {
+    return jsonResponse(res, 500, { error: 'Procedural audio generator not available' });
+  }
+
+  readBody(req).then(body => {
+    const spec = body.spec || body;
+    if (!spec || !spec.scene) {
+      return jsonResponse(res, 400, { error: 'Missing scene spec' });
+    }
+    try {
+      const html = proceduralAudio.generate(spec);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+      res.end(html);
+    } catch(e) {
+      console.error('Procedural audio error:', e.message);
+      jsonResponse(res, 500, { error: e.message });
+    }
+  });
 }
 
 async function handleGenerateOutput(req, res, type) {
@@ -361,10 +431,12 @@ server.listen(PORT, () => {
   console.log('╚══════════════════════════════════════════╝');
   console.log('');
   console.log('Endpoints:');
-  console.log('  POST /api/generate         → Director agent (LLM)');
-  console.log('  POST /api/generate/p5js    → p5.js HTML');
-  console.log('  POST /api/generate/ascii   → ASCII HTML');
-  console.log('  POST /api/generate/stitch  → Stitcher HTML');
+  console.log('  POST /api/generate                → Director agent (LLM)');
+  console.log('  POST /api/generate/p5js           → p5.js HTML (enhanced)');
+  console.log('  POST /api/generate/ascii          → ASCII HTML (basic)');
+  console.log('  POST /api/generate/ascii-enhanced → ASCII HTML (4-layer)');
+  console.log('  POST /api/generate/procedural-audio → Procedural Audio HTML');
+  console.log('  POST /api/generate/stitch         → Stitcher HTML');
   console.log('');
   if (!director) console.warn('⚠ Director agent NOT loaded — LLM calls will fail.');
   else console.log('✓ Director agent ready');
