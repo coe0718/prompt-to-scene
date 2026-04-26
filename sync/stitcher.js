@@ -82,7 +82,6 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${scene.name || 'Scene'} — Prompt-to-Scene</title>
-  <script>p5.disableFriendlyErrors = true;</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
   <style>
@@ -906,7 +905,7 @@ function drawGeo(g, t, p, beat, al) {
       const sr = r + Math.sin(sa*3+t)*20*CONFIG.intensity*al + onsetFlash*15;
       g.vertex(cos(sa)*sr, sin(sa)*sr);
     }
-    g.endShape(CLOSE);
+    g.endShape();
     g.pop();
   }
   g.pop();
@@ -1009,7 +1008,7 @@ function drawGlitch(g, t, p, beat, al) {
       const a=(j/60)*TWO_PI;
       g.vertex(cos(a)*(r+noise(a*2,i*0.3,t*0.5)*20),sin(a)*(r+noise(a*2,i*0.3,t*0.5)*20));
     }
-    g.endShape(CLOSE);
+    g.endShape();
   }
   g.pop();
 

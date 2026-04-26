@@ -78,7 +78,6 @@ function buildHTML(spec) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${scene.name || 'Scene'} — Prompt-to-Scene</title>
-  <script>p5.disableFriendlyErrors = true;</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
   <script src="https://unpkg.com/p5.sound@0.3.0/dist/p5.sound.min.js"></script>
   <style>
@@ -453,7 +452,7 @@ function drawGeometric(g, t, p) {
       const sr = r + Math.sin(sa * 3 + t) * 20 * VISUAL.intensity;
       g.vertex(Math.cos(sa) * sr, Math.sin(sa) * sr);
     }
-    g.endShape(CLOSE);
+    g.endShape();
 
     // Connecting lines between vertices
     g.stroke(h.h, h.s, h.b, 20);
@@ -685,7 +684,7 @@ function drawGlitch(g, t, p) {
       const noiseVal = noise(angle * 2, i * 0.3, t * 0.5) * 20;
       g.vertex(Math.cos(angle) * (r + noiseVal), Math.sin(angle) * (r + noiseVal));
     }
-    g.endShape(CLOSE);
+    g.endShape();
   }
   g.pop();
 

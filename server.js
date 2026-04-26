@@ -213,11 +213,6 @@ async function handleRequest(req, res) {
     const filePath = path.join(ROOT, url.pathname.slice(1));
     return serveFile(res, filePath);
   }
-  // Test scenes
-  if (url.pathname.startsWith('/test-')) {
-    const filePath = path.join(ROOT, url.pathname.slice(1));
-    return serveFile(res, filePath);
-  }
   // Fallback for CSS/JS in ui/
   const uiPath = path.join(ROOT, 'ui', url.pathname.slice(1));
   if (fs.existsSync(uiPath)) {
@@ -278,11 +273,11 @@ async function handleGenerateP5JSEnhanced(req, res) {
   const body = await readBody(req);
   const spec = body.spec || body;
 
-  // Inject spec into template via body data-spec attribute
-    const specJSON = JSON.stringify(spec).replace(/'/g, "\\'");
+    // Inject spec into template via body data-spec attribute (use &quot; for HTML attr safety)
+    const specJSON = JSON.stringify(spec).replace(/"/g, '&quot;');
   const html = enhancedTemplate.replace(
     '<body>',
-    '<body data-spec=\'' + specJSON + '\'>'
+    '<body data-spec="' + specJSON + '">'
   );
 
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -298,13 +293,16 @@ function handleASCIIEnhanced(req, res) {
 
   readBody(req).then(body => {
     const spec = body.spec || body;
-    const specJSON = JSON.stringify(spec).replace(/'/g, "\\'");
+    const specJSON = JSON.stringify(spec).replace(/"/g, '&quot;');
     const html = asciiEnhancedTemplate.replace(
-      "<body data-spec='{}'>",
-      "<body data-spec='" + specJSON + "'>"
+      '<body data-spec="{}">',
+      '<body data-spec="' + specJSON + '">'
     );
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
+  }).catch(e => {
+    console.error('ASCII Enhanced error:', e.message);
+    jsonResponse(res, 500, { error: e.message });
   });
 }
 
@@ -328,6 +326,9 @@ function handleProceduralAudio(req, res) {
       console.error('Procedural audio error:', e.message);
       jsonResponse(res, 500, { error: e.message });
     }
+  }).catch(e => {
+    console.error('Procedural audio handler error:', e.message);
+    jsonResponse(res, 500, { error: e.message });
   });
 }
 
