@@ -1,0 +1,9 @@
+# Secrets (real API keys)
+.env
+
+# Dependencies
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db

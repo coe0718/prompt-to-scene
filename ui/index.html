@@ -814,8 +814,20 @@ function generateOutput(type) {
   }
 }
 
-function generateP5JS(spec, specJSON) {
-  const html = buildP5HTML(spec).replaceAll('<\/script>', '</scr' + 'ipt>');
+async function generateP5JS(spec, specJSON) {
+  let html;
+  try {
+    // Use enhanced server endpoint (4-layer pipeline)
+    const resp = await fetch('/api/generate/p5js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spec })
+    });
+    html = await resp.text();
+  } catch(e) {
+    console.warn('Enhanced p5js fetch failed, using local fallback:', e);
+    html = buildP5HTML(spec).replaceAll('<\\/script>', '</scr' + 'ipt>');
+  }
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   generatedOutputs.p5js = url;

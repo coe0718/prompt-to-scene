@@ -8,6 +8,11 @@
  *   node server.js
  *   node server.js --port 3000
  *
+ * Environment (optional .env file):
+ *   OPENROUTER_API_KEY   — for minimax-m2.5 (default LLM)
+ *   NVIDIA_API_KEY       — for kimi-k2.5-nim (Kimi track)
+ *   PORT                 — server port (default: 7041)
+ *
  * Endpoints:
  *   GET  /                  → Demo UI
  *   POST /api/generate       → { prompt } → Director spec
@@ -21,7 +26,26 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
-const PORT = parseInt(process.env.PORT || process.argv[3] || '3000', 10);
+// ─── Load .env file (no dependency needed) ─────────────────────────────────
+
+(function loadEnv() {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    if (!fs.existsSync(envPath)) return;
+    const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim().replace(/^['"]|['"]$/g, '');
+      if (!process.env[key]) process.env[key] = val;
+    }
+  } catch(e) { /* ignore */ }
+})();
+
+const PORT = parseInt(process.env.PORT || process.argv[3] || '7041', 10);
 const ROOT = __dirname;
 
 // ─── Require project modules ───────────────────────────────────────────────
@@ -54,6 +78,27 @@ try {
 } catch(e) {
   console.warn('Stitcher not available:', e.message);
   stitcher = null;
+}
+
+let presets;
+try {
+  presets = require('./presets.js').PRESETS;
+  console.log(`✓ ${presets.length} presets loaded`);
+} catch(e) {
+  console.warn('Presets not available:', e.message);
+  presets = [];
+}
+
+// ─── Enhanced p5.js template ──────────────────────────────────────────────
+
+let enhancedTemplate = null;
+try {
+  enhancedTemplate = require('fs').readFileSync(
+    path.join(ROOT, 'generators', 'p5js-enhanced.html'), 'utf8'
+  );
+  console.log('✓ Enhanced p5.js template loaded (' + (enhancedTemplate.length/1024).toFixed(1) + 'KB)');
+} catch(e) {
+  console.warn('Enhanced template not available:', e.message);
 }
 
 // ─── MIME types ────────────────────────────────────────────────────────────
@@ -119,7 +164,7 @@ async function handleRequest(req, res) {
     return handleGenerate(req, res);
   }
   if (url.pathname === '/api/generate/p5js' && method === 'POST') {
-    return handleGenerateOutput(req, res, 'p5js');
+    return handleGenerateP5JSEnhanced(req, res);
   }
   if (url.pathname === '/api/generate/ascii' && method === 'POST') {
     return handleGenerateOutput(req, res, 'ascii');
@@ -160,26 +205,60 @@ async function handleRequest(req, res) {
 async function handleGenerate(req, res) {
   const body = await readBody(req);
   const prompt = body.prompt || body.raw || '';
+  const usePreset = body.use_preset === true;
 
-  if (!prompt || prompt.length < 2) {
-    return jsonResponse(res, 400, { error: 'Prompt too short (min 2 chars)' });
+  // Try LLM first, fall back to preset
+  const tryLLM = !usePreset && prompt && prompt.length >= 2;
+
+  if (tryLLM && director) {
+    try {
+      const spec = await director.generateSpec(prompt, {
+        duration: body.duration || 45,
+        model: body.model || undefined,
+      });
+      console.log(`LLM: "${spec.scene?.name}" — ${spec.scene?.mood}, ${spec.scene?.tempo}BPM`);
+      return jsonResponse(res, 200, spec);
+    } catch(e) {
+      console.warn('LLM failed, falling back to presets:', e.message);
+    }
   }
 
-  if (!director) {
-    return jsonResponse(res, 503, { error: 'Director agent not available (missing API keys?)' });
+  // Fallback: pick a preset
+  if (presets.length === 0) {
+    return jsonResponse(res, 503, { error: 'No presets available and Director agent not available' });
   }
 
-  try {
-    const spec = await director.generateSpec(prompt, {
-      duration: body.duration || 45,
-      model: body.model || undefined,
-    });
-    console.log(`Generated: "${spec.scene?.name}" — ${spec.scene?.mood}, ${spec.scene?.tempo}BPM`);
-    jsonResponse(res, 200, spec);
-  } catch(e) {
-    console.error('Director error:', e.message);
-    jsonResponse(res, 500, { error: e.message });
+  const preset = presets[Math.floor(Math.random() * presets.length)];
+  // Stamp with current time
+  const spec = JSON.parse(JSON.stringify(preset));
+  spec.prompt = prompt || preset.prompt;
+  spec.metadata = {
+    director_model: 'preset',
+    generated_at: new Date().toISOString(),
+    generation_time_ms: 0
+  };
+  console.log(`Preset: "${spec.scene?.name}" — ${spec.scene?.mood}, ${spec.scene?.tempo}BPM`);
+  jsonResponse(res, 200, spec);
+}
+
+async function handleGenerateP5JSEnhanced(req, res) {
+  if (!enhancedTemplate) {
+    // Fall back to old generator
+    return handleGenerateOutput(req, res, 'p5js');
   }
+
+  const body = await readBody(req);
+  const spec = body.spec || body;
+
+  // Inject spec into template via body data-spec attribute
+  const specJSON = JSON.stringify(spec).replace(/'/g, "\\'");
+  const html = enhancedTemplate.replace(
+    '<body>',
+    '<body data-spec=\'' + specJSON + '\'>'
+  );
+
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(html);
 }
 
 async function handleGenerateOutput(req, res, type) {
@@ -236,11 +315,23 @@ async function handleBatch(req, res) {
   for (let i = 0; i < prompts.length; i++) {
     const prompt = prompts[i];
     try {
-      if (!director) {
-        errors.push({ index: i, prompt, error: 'Director not available' });
-        continue;
+      let spec;
+      if (director) {
+        try {
+          spec = await director.generateSpec(prompt, { duration });
+        } catch(e) {
+          // LLM failed, use preset
+          const p = presets[i % presets.length];
+          spec = JSON.parse(JSON.stringify(p));
+          spec.prompt = prompt;
+          spec.metadata = { director_model: 'preset-fallback', generated_at: new Date().toISOString(), generation_time_ms: 0 };
+        }
+      } else {
+        const p = presets[i % presets.length];
+        spec = JSON.parse(JSON.stringify(p));
+        spec.prompt = prompt;
+        spec.metadata = { director_model: 'preset', generated_at: new Date().toISOString(), generation_time_ms: 0 };
       }
-      const spec = await director.generateSpec(prompt, { duration });
       results.push({ index: i, prompt, spec });
       console.log(`  [${i+1}/${prompts.length}] "${spec.scene?.name}" — ${spec.scene?.mood}`);
     } catch(e) {

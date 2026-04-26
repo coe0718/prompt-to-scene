@@ -146,7 +146,7 @@ async function callLLM(prompt, model = DEFAULT_MODEL) {
 
 function parseJSONResponse(text) {
   // Extract JSON from response (handle potential markdown code blocks)
-  const jsonMatch = text.match(/\{[\s\S*\}{1,2}/);
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('No JSON found in response');
   }
