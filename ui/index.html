@@ -951,7 +951,7 @@ function generateStitcher(spec, specJSON) {
   if (lyrics) {
     const lines = lyrics.split('\n').filter(l => l.trim());
     const lyricHTML = '<div id="lyric-overlay" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);text-align:center;font-family:\'Courier New\',monospace;font-size:16px;color:rgba(255,255,255,0.85);text-shadow:0 0 10px rgba(0,0,0,0.8);z-index:20;pointer-events:none;max-width:90%;line-height:1.6;"><div id="lyric-line" style="transition:opacity 0.3s;">' + lines[0] + '</div></div>';
-    html = html.replace('</body>', lyricHTML + '\n<script>\n(function(){\n  const lines=' + JSON.stringify(lines) + ';\n  const el=document.getElementById("lyric-line");\n  if(!el||!lines.length)return;\n  let idx=0;\n  const update=()=>{\n    const beat=parseInt(document.getElementById("hud-beat")?.textContent||0);\n    const newIdx=Math.floor(beat/8)%lines.length;\n    if(newIdx!==idx){idx=newIdx;el.style.opacity=0;setTimeout(()=>{el.textContent=lines[idx];el.style.opacity=1;},150);}\n    requestAnimationFrame(update);\n  };\n  update();\n})();\n</script>\n</body>');
+    html = html.replace('</body>', lyricHTML + '\n<script>\n(function(){\n  const lines=' + JSON.stringify(lines) + ';\n  const el=document.getElementById("lyric-line");\n  if(!el||!lines.length)return;\n  let idx=0;\n  const update=()=>{\n    const beat=parseInt(document.getElementById("hud-beat")?.textContent||0);\n    const newIdx=Math.floor(beat/8)%lines.length;\n    if(newIdx!==idx){idx=newIdx;el.style.opacity=0;setTimeout(()=>{el.textContent=lines[idx];el.style.opacity=1;},150);}\n    requestAnimationFrame(update);\n  };\n  update();\n})();\n<\/script>\n</body>');
   }
 
   const blob = new Blob([html], { type: 'text/html' });

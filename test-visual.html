@@ -5,7 +5,7 @@
 <script>try{window.addEventListener("deviceorientation",function(){},true);window.addEventListener("devicemotion",function(){},true)}catch(e){}</script>
 <style>html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}</style>
 </head>
-<body>
+<body data-spec='{"scene":{"name":"test","tempo":120,"duration_seconds":30},"visual":{"style":"geometric","color_palette":["#ff6b6b","#feca57","#00d4ff","#2d1b69"],"effects":["bloom","vignette"],"intensity":0.8},"timing":{"beat_interval_ms":500,"sections":[{"name":"intro","start_beat":0,"end_beat":8},{"name":"drop","start_beat":8,"end_beat":24}],"key_moments":[]}}'>
 <script>
 // ════════════════════════════════════════════════════════════════
 // 4-LAYER ENHANCED p5.js RENDERER
@@ -585,6 +585,7 @@ function draw() {
   const p = t / S.duration;
   const beat = Math.floor(t * 1000 / T.beatMs);
   
+  try {
   // Layer 1: Ambient background
   drawAmbient(t, p);
   
@@ -606,6 +607,14 @@ function draw() {
   
   // Layer 4: Beat pulse rings
   drawBeatPulses(t, beat);
+  
+  } catch(e) {
+    fill(0, 0, 100);
+    textSize(14);
+    textAlign(LEFT, TOP);
+    text('ERR: ' + (e.message || e), 10, 10);
+    noLoop();
+  }
 }
 
 function windowResized() { resizeCanvas(windowWidth, windowHeight); }
