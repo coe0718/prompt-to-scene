@@ -26,6 +26,17 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
+// ─── Crash recovery: auto-restart on failure ────────────────────────────────
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err.message);
+  console.log('🔄 Restarting in 2s...');
+  setTimeout(() => { process.exit(1); }, 2000);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled rejection:', reason);
+});
+
 // ─── Load .env file (no dependency needed) ─────────────────────────────────
 
 (function loadEnv() {

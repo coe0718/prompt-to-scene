@@ -1,0 +1,23 @@
+✓ 19 presets loaded
+✓ Enhanced p5.js template loaded (22.3KB)
+✓ Procedural audio generator loaded
+✓ Enhanced ASCII template loaded (12.9KB)
+
+╔══════════════════════════════════════════╗
+║   Prompt-to-Scene Server                 ║
+║   http://localhost:7041                    ║
+╚══════════════════════════════════════════╝
+
+Endpoints:
+  POST /api/generate                → Director agent (LLM)
+  POST /api/generate/p5js           → p5.js HTML (enhanced)
+  POST /api/generate/ascii          → ASCII HTML (basic)
+  POST /api/generate/ascii-enhanced → ASCII HTML (4-layer)
+  POST /api/generate/procedural-audio → Procedural Audio HTML
+  POST /api/generate/stitch         → Stitcher HTML
+
+✓ Director agent ready
+✓ p5js generator ready
+✓ ASCII generator ready
+✓ Stitcher ready
+

@@ -1,89 +1,11 @@
-/**
- * Stitcher — Sync Layer v2
- *
- * Combines Director scene spec with audio (uploaded or procedural)
- * into a final synchronized HTML experience.
- *
- * New in v2:
- *   - Real-time onset detection (no BPM pre-scan needed)
- *   - Drag-and-drop MP3/WAV upload
- *   - Playback controls (play/pause/restart/seek)
- *   - Audio data URL embedding (self-contained HTML)
- *   - v3: Waveform oscilloscope overlay, beat pulse ring, GIF export, fullscreen
- *
- * Usage:
- *   node stitcher.js scene.json                                 # procedural audio
- *   node stitcher.js scene.json --audio song.mp3                # file path
- *   node stitcher.js scene.json --audio-data "<base64>"         # embedded
- *   node stitcher.js scene.json --audio song.mp3 --output final.html
- */
-
-const fs = require('fs');
-const path = require('path');
-
-// ─── Helper ────────────────────────────────────────────────────────────────
-
-function fmtTime(secs) {
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return m + ':' + (s < 10 ? '0' : '') + s;
-}
-
-function audioFileToDataUrl(filePath) {
-  const buf = fs.readFileSync(filePath);
-  const ext = path.extname(filePath).toLowerCase();
-  const mime = ext === '.wav' ? 'audio/wav'
-    : ext === '.ogg' ? 'audio/ogg'
-    : ext === '.flac' ? 'audio/flac'
-    : 'audio/mpeg';
-  const b64 = buf.toString('base64');
-  return `data:${mime};base64,${b64}`;
-}
-
-// ─── HTML builder ──────────────────────────────────────────────────────────
-
-function buildHTML(spec, audioUrl, audioDataUrl) {
-  const visual   = spec.visual  || {};
-  const scene    = spec.scene   || {};
-  const timing   = spec.timing  || {};
-
-  const mood      = scene.mood        || 'dark';
-  const tempo     = scene.tempo        || 120;
-  const duration  = scene.duration_seconds || 45;
-  const beatMs    = timing.beat_interval_ms || Math.round(60000 / tempo);
-  const sections  = timing.sections   || [];
-  const keyMoments= timing.key_moments|| [];
-  const intensity = visual.intensity  ?? 0.5;
-  const style     = visual.style      || 'geometric';
-  const palette   = visual.color_palette || ['#ff00ff', '#00ffff', '#1a1a2e'];
-  const effects   = visual.effects    || [];
-  const aspect    = visual.resolution?.width > visual.resolution?.height ? '16:9' : '9:16';
-  const artist    = spec.metadata?.artist || '';
-  const trackTitle = scene.name || '';
-  const lyrics    = spec.lyrics  || null; // array of strings
-
-  const hasExternalAudio = !!audioUrl;
-  const hasEmbeddedAudio = !!audioDataUrl;
-  const hasAnyAudio = hasExternalAudio || hasEmbeddedAudio;
-
-  const paletteJSON  = JSON.stringify(palette);
-  const effectsJSON  = JSON.stringify(effects);
-  const sectionsJSON = JSON.stringify(sections);
-  const keyMomJSON   = JSON.stringify(keyMoments);
-
-  // Inject audio data URL into the HTML if provided
-  const audioSource = hasEmbeddedAudio
-    ? audioDataUrl
-    : (hasExternalAudio ? audioUrl : null);
-
-  return `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${scene.name || 'Scene'} — Prompt-to-Scene</title>
+  <title>test — Prompt-to-Scene</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
+  
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
     canvas { display: block; }
@@ -97,7 +19,7 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
     }
     #drop-zone.active {
       display: flex; pointer-events: all;
-      border-color: ${palette[0] || '#cba6f7'};
+      border-color: #ff6b6b;
       background: rgba(0,0,0,0.9);
     }
     #drop-zone .label {
@@ -105,7 +27,7 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
       font-size: 18px; text-align: center;
       pointer-events: none;
     }
-    #drop-zone .label b { color: ${palette[0] || '#cba6f7'}; }
+    #drop-zone .label b { color: #ff6b6b; }
 
     #hud {
       position: fixed; bottom: 0; left: 0; right: 0;
@@ -137,8 +59,8 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
       color: #fff;
     }
     #controls button.active {
-      border-color: ${palette[0] || '#cba6f7'};
-      color: ${palette[0] || '#cba6f7'};
+      border-color: #ff6b6b;
+      color: #ff6b6b;
     }
 
     #seek-bar {
@@ -147,7 +69,7 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
     }
     #seek-bar .progress {
       height: 100%;
-      background: ${palette[0] || '#cba6f7'};
+      background: #ff6b6b;
       width: 0%; transition: width 0.05s linear;
     }
     #seek-bar:hover { height: 8px; }
@@ -166,7 +88,7 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
     }
     #audio-indicator .fill {
       width: 100%;
-      background: ${palette[0] || '#ff00ff'};
+      background: #ff6b6b;
       transition: height 0.08s;
       border-radius: 4px;
     }
@@ -234,30 +156,30 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
 
 <div id="hud">
   <div class="left">
-    <span>${scene.name || 'scene'}</span>
-    <span id="hud-style">${style}</span>
+    <span>test</span>
+    <span id="hud-style">geometric</span>
     <span id="hud-section">—</span>
-    <span id="hud-audio">${hasAnyAudio ? '🎵 Audio' : '🔊 Synth'}</span>
+    <span id="hud-audio">🔊 Synth</span>
     <span id="hud-onsets" style="opacity:0.5">beats: 0</span>
     <span id="hud-fps" style="opacity:0.35;font-size:10px">60fps</span>
   </div>
   <div>
-    <span id="hud-time">0:00</span> / <span id="hud-duration">${fmtTime(duration)}</span>
+    <span id="hud-time">0:00</span> / <span id="hud-duration">0:30</span>
     &nbsp;·&nbsp; <span id="hud-beat">0</span>b
-    &nbsp;·&nbsp; ${tempo}BPM
+    &nbsp;·&nbsp; 120BPM
     &nbsp;·&nbsp; <span style="opacity:0.4;font-size:10px">1-8:style G:GIF V:WebM F:full A:auto C:cam 9/0/-:intensity !-*:save</span>
   </div>
 </div>
 <div id="audio-indicator"><div class="fill" style="height:0%"></div></div>
 <div id="record-toast">● REC 0:00</div>
-<div id="title-card" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:30;font-family:'Courier New',monospace;font-size:48px;color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.5);opacity:0;transition:opacity 0.5s;">${scene.name || 'Scene'}</div>
+<div id="title-card" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:30;font-family:'Courier New',monospace;font-size:48px;color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.5);opacity:0;transition:opacity 0.5s;">test</div>
 <div id="lyrics-overlay">
   <div id="lyric-current"></div>
   <div id="lyric-next"></div>
 </div>
 <div id="watermark">
-  <span class="artist">${artist || trackTitle}</span>
-  ${artist ? '<br><span class="by">' + trackTitle + '</span>' : ''}
+  <span class="artist">test</span>
+  
   <br><span class="by" style="font-size:9px;">Prompt-to-Scene</span>
 </div>
 <script>
@@ -266,23 +188,23 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CONFIG = {
-  name:       ${JSON.stringify(scene.name)},
-  mood:       ${JSON.stringify(mood)},
-  tempo:      ${tempo},
-  duration:   ${duration},
-  beatMs:     ${beatMs},
-  style:      ${JSON.stringify(style)},
-  palette:    ${paletteJSON},
-  effects:    ${effectsJSON},
-  intensity:  ${intensity},
-  sections:   ${sectionsJSON},
-  keyMoments: ${keyMomJSON},
-  audioUrl:   ${JSON.stringify(audioSource || null)},
-  hasAudio:   ${hasAnyAudio},
-  aspect:     ${JSON.stringify(aspect)},
-  artist:     ${JSON.stringify(artist)},
-  trackTitle: ${JSON.stringify(trackTitle)},
-  lyrics:     ${lyrics ? JSON.stringify(lyrics) : 'null'},
+  name:       "test",
+  mood:       "dark",
+  tempo:      120,
+  duration:   30,
+  beatMs:     500,
+  style:      "geometric",
+  palette:    ["#ff6b6b","#feca57","#00d4ff"],
+  effects:    [],
+  intensity:  0.5,
+  sections:   [],
+  keyMoments: [],
+  audioUrl:   null,
+  hasAudio:   false,
+  aspect:     "9:16",
+  artist:     "",
+  trackTitle: "test",
+  lyrics:     null,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -505,7 +427,7 @@ document.getElementById('drop-zone').addEventListener('dragleave', hideUpload);
 document.getElementById('drop-zone').addEventListener('drop', e => {
   e.preventDefault();
   const file = e.dataTransfer.files[0];
-  if (file && (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|flac)$/i))) {
+  if (file && (file.type.startsWith('audio/') || file.name.match(/.(mp3|wav|ogg|flac)$/i))) {
     handleAudioFile(file);
   } else {
     hideUpload();
@@ -1228,51 +1150,37 @@ function finishGifRecord() {
 
   if (gifFrames.length < 2) return;
 
-  try {
-    if (typeof GIF === 'undefined') {
-      throw new Error('gif.js library not loaded');
-    }
-
-    // Downsample frames (10fps for GIF)
-    const sampled = [];
-    const step = Math.max(1, Math.floor(gifFrames.length / 50));
-    for (let i = 0; i < gifFrames.length; i += step) {
-      sampled.push(gifFrames[i]);
-    }
-
-    // Create GIF at 320px wide
-    const gifW = 320;
-    const gifH = Math.round(gifW * (height / width));
-    const gif = new GIF({ workers: 2, quality: 8, width: gifW, height: gifH });
-
-    for (const frame of sampled) {
-      // Scale down frame
-      const scaled = createImage(gifW, gifH);
-      scaled.copy(frame, 0, 0, width, height, 0, 0, gifW, gifH);
-      gif.addFrame(scaled.canvas || scaled.elt, { delay: 100 });
-    }
-
-    gif.on('finished', blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = CONFIG.name + '-scene.gif';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
-
-    gif.render();
-  } catch(e) {
-    console.error('GIF recording failed:', e.message || e);
-    const toast = document.getElementById('record-toast');
-    if (toast) {
-      toast.textContent = 'GIF failed: ' + (e.message || 'unknown error');
-      toast.classList.add('visible');
-      setTimeout(() => toast.classList.remove('visible'), 3000);
-    }
+  // Downsample frames (10fps for GIF)
+  const sampled = [];
+  const step = Math.max(1, Math.floor(gifFrames.length / 50));
+  for (let i = 0; i < gifFrames.length; i += step) {
+    sampled.push(gifFrames[i]);
   }
+
+  // Create GIF at 320px wide
+  const gifW = 320;
+  const gifH = Math.round(gifW * (height / width));
+  const gif = new GIF({ workers: 2, quality: 8, width: gifW, height: gifH });
+
+  for (const frame of sampled) {
+    // Scale down frame
+    const scaled = createImage(gifW, gifH);
+    scaled.copy(frame, 0, 0, width, height, 0, 0, gifW, gifH);
+    gif.addFrame(scaled.canvas || scaled.elt, { delay: 100 });
+  }
+
+  gif.on('finished', blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = CONFIG.name + '-scene.gif';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  gif.render();
   gifFrames = [];
 }
 
@@ -1447,73 +1355,4 @@ async function toggleWebcam() {
 }
 </script>
 </body>
-</html>`;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CLI
-// ═══════════════════════════════════════════════════════════════════════════
-
-if (require.main === module) {
-  const args = process.argv.slice(2);
-
-  if (args.length === 0) {
-    console.error('stitcher.js v2 — Sync layer: audio + visuals + onset detection');
-    console.error('');
-    console.error('Usage:');
-    console.error('  node stitcher.js <scene-spec.json>');
-    console.error('  node stitcher.js <scene-spec.json> --audio song.mp3');
-    console.error('  node stitcher.js <scene-spec.json> --audio song.mp3 --output final.html');
-    console.error('');
-    console.error('Without --audio, uses procedural Web Audio synthesis.');
-    console.error('New in v2: onset detection, drag-drop upload, play/pause/seek.');
-    process.exit(1);
-  }
-
-  let spec;
-  const input = args[0];
-
-  try {
-    spec = JSON.parse(input);
-  } catch {
-    try {
-      spec = JSON.parse(fs.readFileSync(input, 'utf8'));
-    } catch (e) {
-      console.error('Error: Could not parse input:', input);
-      process.exit(1);
-    }
-  }
-
-  // Parse options
-  let audioUrl = null;
-  let audioDataUrl = null;
-
-  const audioIdx = args.indexOf('--audio');
-  if (audioIdx !== -1 && args[audioIdx + 1]) {
-    const audioInput = args[audioIdx + 1];
-    if (fs.existsSync(audioInput)) {
-      // Local file: embed as data URL for full self-containment
-      audioDataUrl = audioFileToDataUrl(audioInput);
-      console.error('Embedded audio:', path.basename(audioInput), '(' + (audioDataUrl.length / 1024).toFixed(0) + 'KB base64)');
-    } else {
-      audioUrl = audioInput;
-    }
-  }
-
-  const dataIdx = args.indexOf('--audio-data');
-  if (dataIdx !== -1 && args[dataIdx + 1]) {
-    audioDataUrl = args[dataIdx + 1];
-  }
-
-  const html = buildHTML(spec, audioUrl, audioDataUrl);
-
-  const outIdx = args.indexOf('--output');
-  if (outIdx !== -1 && args[outIdx + 1]) {
-    fs.writeFileSync(args[outIdx + 1], html);
-    console.error('Written to:', args[outIdx + 1]);
-  } else {
-    console.log(html);
-  }
-}
-
-module.exports = { buildHTML, audioFileToDataUrl };
+</html>

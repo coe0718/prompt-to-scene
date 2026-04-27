@@ -14,7 +14,7 @@ const https = require('https');
 
 // Suno API configuration
 const SUNO_API_BASE = process.env.SUNO_API_URL || 'https://api.suno.ai';
-const SUNO_API_KEY = process.env.SUNO_API_KEY;
+const SUNO_API_KEY = process.env.SUNO_API_KEY || '';
 const SUNO_USER_ID = process.env.SUNO_USER_ID;
 
 // Polling config

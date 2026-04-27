@@ -362,7 +362,8 @@
         <label style="font-size:11px;color:var(--dim);">Mode:</label>
         <select id="mode-select" style="padding:6px 10px;background:var(--glass);border:1px solid var(--glass-border);border-radius:8px;color:var(--text);font-size:12px;">
           <option value="preset" selected>🎨 Presets (instant)</option>
-          <option value="llm">🤖 LLM (AI generated)</option>
+          <option value="llm">🤖 MiniMax M2.5 (OpenRouter)</option>
+          <option value="kimi">🌙 Kimi K2.5 (NVIDIA NIM)</option>
         </select>
       </div>
       <div style="margin-top:6px;">
@@ -389,7 +390,7 @@
       <button class="btn" onclick="generateOutput('suno')">Suno Audio</button>
     </div>
     <button class="btn accent full" onclick="generateOutput('stitcher')" style="margin-top:4px;">✦ Stitch Final</button>
-    <button class="btn full" onclick="generateOutput('stitcher'); setTimeout(()=>alert('Open the Final tab, press Play, then press G for GIF or V for WebM recording.'),500)" style="margin-top:4px;">⏺ Record Demo</button>
+    <button class="btn full" onclick="recordDemo()" style="margin-top:4px;">⏺ Record Demo</button>
 
     <button class="btn full" onclick="showBatchUI()">📦 Batch Generate</button>
     <div id="batch-progress" style="display:none;margin-top:4px;">
@@ -458,6 +459,19 @@
       <div class="preview-frame">
         <div class="placeholder" id="placeholder-visual">Click "p5.js Visual" to generate</div>
         <iframe id="frame-visual" style="display:none;"></iframe>
+      </div>
+      <div style="padding:12px 0;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+        <label style="font-size:11px;">Tempo:<br><input id="runtime-tempo" type="range" min="40" max="200" value="" style="width:120px" oninput="updateParam('tempo',this.value)"></label>
+        <label style="font-size:11px;">Intensity:<br><input id="runtime-intensity" type="range" min="0.1" max="1" value="" step="0.05" style="width:100px" oninput="updateParam('intensity',this.value)"></label>
+        <label style="font-size:11px;">Swatch:<br>
+          <select id="runtime-swatch" onchange="updateParam('palette',this.value)" style="font-size:10px;padding:2px;">
+            <option value="cyberpunk">👾 Cyberpunk</option>
+            <option value="neon">🌃 Neon</option>
+            <option value="nature">🌿 Nature</option>
+            <option value="pastel">🎨 Pastel</option>
+          </select>
+        </label>
+        <label style="font-size:11px;">Beat:<br><canvas id="runtime-timeline" width="300" height="20" style="cursor:pointer;" onclick="handleTimelineClick(event)"></canvas></label>
       </div>
     </div>
 
@@ -607,9 +621,11 @@ async function generateScene() {
     const lyricsText = document.getElementById('lyrics-input').value.trim();
     const lyrics = lyricsText ? lyricsText.split('\n').map(s => s.trim()).filter(s => s) : null;
 
-    const usePreset = document.getElementById('mode-select').value !== 'llm';
+    const modeValue = document.getElementById('mode-select').value;
+    const usePreset = modeValue === 'preset';
     const body = { prompt, duration, use_preset: usePreset };
-    if (!usePreset) body.model = 'minimax-m2.5';
+    if (modeValue === 'llm') body.model = 'minimax-m2.5';
+    else if (modeValue === 'kimi') body.model = 'kimi-k2.5-nim';
 
     const response = await fetch('/api/generate', {
       method: 'POST',
@@ -672,12 +688,84 @@ function init() {
   if (!loadFromHash()) {
     renderSceneList();
     showSceneSpec(SCENES[activeScene]);
+    renderTimeline(SCENES[activeScene]);      // ← timeline render
   }
   updateStatus();
   setupTabs();
   setupStyleButtons();
   setupEffectButtons();
   renderGallery();
+}
+
+function renderTimeline(spec) {
+  const canvas = document.getElementById('runtime-timeline');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const s = spec.scene || {}, t = spec.timing || {};
+  const beatMs = t.beat_interval_ms || 500;
+  const dur = s.duration_seconds || 45;
+  const totalBeats = Math.floor((dur * 1000) / beatMs);
+  
+  // Color palette
+  const colors = {
+    intro: '#667eea', build: '#f093fb', drop: '#ff6b6b', outro: '#a8e6ce',
+    calm: '#a8e6cf', uplifting: '#ffd3b6', melancholic: '#74b9ff', chaotic: '#fd79a8',
+    meditative: '#fab1a0', default: '#dfe6e9'
+  };
+  
+  // Background
+  ctx.fillStyle = '#2d3436';
+  ctx.fillRect(0, 0, w, h);
+  
+  // Sections
+  if (t.sections && t.sections.length) {
+    t.sections.forEach(sec => {
+      const start = sec.start_beat;
+      const end = Math.min(sec.end_beat, totalBeats);
+      const width = (end - start) / totalBeats * w;
+      ctx.fillStyle = colors[sec.name] || colors.default;
+      ctx.fillRect(start / totalBeats * w, 0, width, h);
+    });
+  }
+  
+  // Current beat marker
+  const iframe = document.getElementById('frame-final');
+  if (iframe && iframe.contentDocument) {
+    const hudBeat = iframe.contentDocument.getElementById('hud-beat');
+    if (hudBeat) {
+      const beat = parseInt(hudBeat.textContent) || 0;
+      const x = beat / totalBeats * w;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.moveTo(x, h);
+      ctx.lineTo(x - 4, 0);
+      ctx.lineTo(x + 4, 0);
+      ctx.fill();
+    }
+  }
+  
+  // Grid lines every 4 beats
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  for (let beat = 0; beat <= totalBeats; beat += 4) {
+    const x = beat / totalBeats * w;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+
+  // Click handler
+  canvas.onclick = function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const beat = Math.floor((clickX / w) * totalBeats);
+    const frame = document.getElementById('frame-final');
+    if (frame && frame.contentWindow.seekToBeat) {
+      frame.contentWindow.seekToBeat(beat);
+    }
+  };
 }
 
 function renderSceneList() {
@@ -827,9 +915,54 @@ function getCurrentSpec() {
   return spec;
 }
 
-function generateOutput(type) {
-  const spec = getCurrentSpec();
+// Hijack generateOutput() to attach runtime hooks and send live updates
+const originalGenerateOutput = generateOutput;
+function generateOutput(type, customSpec) {
+  const spec = customSpec || getCurrentSpec();
   const specJSON = JSON.stringify(spec);
+
+  // Set initial slider values
+  if (type === 'p5js') {
+    document.getElementById('runtime-tempo').value = spec.scene?.tempo || 120;
+    document.getElementById('runtime-intensity').value = spec.visual?.intensity || 0.5;
+    const palettes = {
+      ['#ff00ff','#00ffff','#2d1b69']:'cyberpunk',
+      ['#ff6b6b','#4ecdc4','#45b7d1']:'neon',
+      ['#4ecdc4','#a8e6cf','#ffd3b6']:'nature',
+      ['#ffb3ba','#bae1ff','#ffffba']:'pastel'
+    };
+    const pl = spec.visual?.color_palette?.[0] ? JSON.stringify(spec.visual.color_palette) : '';
+    document.getElementById('runtime-swatch').value = palettes[pl] || 'cyberpunk';
+    renderTimeline(spec);
+  }
+
+  // Send to original generator
+  return originalGenerateOutput(type);
+}
+
+// Patch iframe prototype to inject updateRuntime() receiver
+try {
+  // Only runs once
+  HTMLIFrameElement.prototype.loaded = false;
+  const oldSetAttribute = HTMLIFrameElement.prototype.setAttribute;
+  HTMLIFrameElement.prototype.setAttribute = function(name, value) {
+    if (name === 'src' && value && !this.loaded) {
+      this.loaded = true;
+      const handler = () => {
+        try {
+          if (this.contentWindow.JSON && this.contentWindow.postMessage) {
+            this.contentWindow.updateRuntime = function(spec) {
+              this.postMessage({ type: 'runtimeUpdate', spec }, '*');
+            };
+          }
+        } catch(e){}
+      };
+      if (this.attachEvent) this.attachEvent('onload', handler);
+      else this.onload = handler;
+    }
+    return oldSetAttribute.apply(this, arguments);
+  }
+} catch(e) { console.warn('Could not patch iframe:', e); }
 
   switch (type) {
     case 'p5js':
@@ -1022,7 +1155,7 @@ function buildP5HTML(spec) {
   const asciiChars = ' .:-=+*#%@'; // standard
 
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>'+(s.name||'scene')+'</title>'+
-    '<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"><\/script>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>'+
     '<style>html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body>'+
     '<script>'+
     'const S={name:'+JSON.stringify(s.name)+',tempo:'+(s.tempo||120)+',duration:'+(s.duration_seconds||45)+'};'+
@@ -1094,7 +1227,7 @@ function buildStitcherHTML(spec, audioDataUrl) {
   const audioSource = audioDataUrl ? JSON.stringify(audioDataUrl) : 'null';
 
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>'+(s.name||'scene')+' — Final</title>'+
-    '<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"><\/script>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>'+
     '<style>html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}#hud{position:fixed;bottom:0;left:0;right:0;padding:12px 20px;font-family:"Courier New",monospace;font-size:12px;color:rgba(255,255,255,0.6);background:linear-gradient(transparent,rgba(0,0,0,0.85));display:flex;justify-content:space-between;z-index:10;pointer-events:none}#audio-ind{position:fixed;top:16px;right:16px;width:8px;height:40px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden;z-index:10}#audio-ind .fill{width:100%;background:'+(v.color_palette?.[0]||'#ff00ff')+';transition:height 0.1s;border-radius:4px}</style></head><body>'+
     '<div id="hud"><div><span>'+(s.name||'scene')+'</span> · <span>'+(v.style||'geometric')+'</span> · <span id="hud-sec">—</span></div><div><span id="hud-time">0:00</span> / <span>'+fmtTime(s.duration_seconds||45)+'</span> · <span id="hud-beat">0</span>b · '+(s.tempo||120)+'BPM</div></div>'+
     '<div id="audio-ind"><div class="fill" style="height:0%"></div></div>'+
@@ -1556,7 +1689,81 @@ function downloadAll() {
 // STARTUP
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// RECORD DEMO — auto-generates stitcher, records 10s WebM
+// ═══════════════════════════════════════════════════════════════════════════
+
+let demoRecorder = null, demoChunks = [];
+
+function recordDemo() {
+  // Generate stitcher first if not done
+  if (!generatedOutputs.final) {
+    generateOutput('stitcher');
+    // Wait for iframe to load, then start recording
+    setTimeout(() => startDemoRecord(), 2000);
+  } else {
+    startDemoRecord();
+  }
+}
+
+function startDemoRecord() {
+  const iframe = document.getElementById('frame-final');
+  if (!iframe || !iframe.contentDocument) {
+    alert('Generate a scene first, then record.');
+    return;
+  }
+
+  const canvas = iframe.contentDocument.querySelector('canvas');
+  if (!canvas) {
+    alert('Canvas not found in stitcher. Try generating first.');
+    return;
+  }
+
+  try {
+    const stream = canvas.captureStream(30);
+    demoChunks = [];
+    demoRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+    demoRecorder.ondataavailable = (e) => { if (e.data.size > 0) demoChunks.push(e.data); };
+    demoRecorder.onstop = () => {
+      const blob = new Blob(demoChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (activeScene || 'demo') + '-demo.webm';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      const el = document.getElementById('uploaded-name');
+      if (el) { el.textContent = '✅ Demo saved!'; setTimeout(() => { el.textContent = ''; }, 3000); }
+    };
+    demoRecorder.start();
+
+    // Record for 10 seconds
+    const el = document.getElementById('uploaded-name');
+    if (el) el.textContent = '⏺ Recording 10s demo...';
+    setTimeout(() => {
+      if (demoRecorder && demoRecorder.state === 'recording') {
+        demoRecorder.stop();
+      }
+    }, 10000);
+  } catch(e) {
+    alert('Recording failed: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ONE-CLICK DEMO — auto-plays on load with URL param ?demo=1
+// ═══════════════════════════════════════════════════════════════════════════
+
+function autoDemo() {
+  surpriseMe();
+}
+
 init();
+
+// Auto-start demo if ?demo=1 in URL
+if (location.search.includes('demo=1') || location.hash === '#demo') {
+  setTimeout(autoDemo, 500);
+}
 </script>
 </body>
 </html>

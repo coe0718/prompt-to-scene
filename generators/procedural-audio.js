@@ -36,7 +36,7 @@ function generate(spec) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${scene.name || 'Procedural Audio'} — Prompt-to-Scene</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
 <style>
 html,body{margin:0;padding:0;overflow:hidden;background:#0a0a0a;font-family:'Courier New',monospace}
 canvas{display:block}

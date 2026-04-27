@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Enhanced ASCII Generator</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
 <script>try{window.addEventListener("deviceorientation",function(){},true);window.addEventListener("devicemotion",function(){},true)}catch(e){}</script>
 <style>
 html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:'Courier New','Consolas',monospace}
@@ -34,7 +34,7 @@ const T = specData.timing || { beatMs: 500, sections: [], keyMoments: [] };
 const CHAR_SETS = {
   standard: ' .:-=+*#%@',
   blocks:   ' ░▒▓█',
-  detailed: " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$".split(''),
+  detailed: " .'`^,:;Il!i><~+_-?][}{1)(|\\\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$".split(''),
   matrix:   'ｦｧｨｩｪｫｬｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾝ',
   hex:      '0123456789ABCDEF ',
   braille:  ' ⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿'
@@ -300,6 +300,7 @@ function drawBeatPulse(t, beat, sectionMul) {
 
 // ═══ HELPERS ═══
 function getSection(beat) {
+  if (!T.sections || !T.sections.length) return null;
   for (const s of T.sections) {
     if (beat >= s.start_beat && beat < s.end_beat) return s;
   }

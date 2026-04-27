@@ -78,7 +78,7 @@ function buildHTML(spec) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${scene.name || 'Scene'} — Prompt-to-Scene</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
   <script src="https://unpkg.com/p5.sound@0.3.0/dist/p5.sound.min.js"></script>
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
