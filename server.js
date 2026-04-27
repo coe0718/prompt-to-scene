@@ -192,7 +192,13 @@ async function handleRequest(req, res) {
     return res.end();
   }
 
-  // ── API Routes ──
+  // ── Health check ──────────────────────────────────────────────────────────
+ if (url.pathname === '/health' && method === 'GET') {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  return res.end(JSON.stringify({ status: 'ok', port: PORT }));
+ }
+
+ // ── API Routes ──
   if (url.pathname === '/api/generate' && method === 'POST') {
     return handleGenerate(req, res);
   }
@@ -215,10 +221,15 @@ async function handleRequest(req, res) {
     return handleBatch(req, res);
   }
 
-  // ── Static files ──
-  if (url.pathname === '/' || url.pathname === '/index.html') {
-    return serveFile(res, path.join(ROOT, 'ui', 'index.html'));
-  }
+// ── Landing page ───────────────────────────────────────────────────────────
+ if (url.pathname === '/landing' || url.pathname === '/about') {
+  return serveFile(res, path.join(ROOT, 'ui', 'landing.html'));
+ }
+
+ // ── Static files ──
+ if (url.pathname === '/' || url.pathname === '/index.html') {
+  return serveFile(res, path.join(ROOT, 'ui', 'index.html'));
+ }
   // ui/ prefix
   if (url.pathname.startsWith('/ui/')) {
     const filePath = path.join(ROOT, url.pathname.slice(1));

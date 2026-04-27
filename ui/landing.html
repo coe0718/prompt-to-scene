@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt-to-Scene — AI Visual Scene Generator</title>
+<meta name="description" content="Generate immersive, beat-synced visual scenes from text prompts using AI. ASCII art, p5.js animations, and procedural audio — all in your browser.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080b14;
+    --surface: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --muted: #8892a4;
+    --accent: #7c5cfc;
+    --accent2: #fc5c7d;
+    --accent3: #5ce1e6;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Animated background */
+  .bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(124,92,252,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(92,225,230,0.08) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(252,92,125,0.05) 0%, transparent 50%),
+      var(--bg);
+    animation: bgPulse 15s ease-in-out infinite alternate;
+  }
+  @keyframes bgPulse {
+    0%   { filter: hue-rotate(0deg); }
+    50%  { filter: hue-rotate(20deg); }
+    100% { filter: hue-rotate(-10deg); }
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* Nav */
+  nav {
+    padding: 20px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  nav .logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  nav .logo span { color: var(--accent); }
+  nav .links { display: flex; gap: 24px; }
+  nav .links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+  }
+  nav .links a:hover { color: var(--text); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #6a4be0; transform: translateY(-1px); }
+  .btn-outline {
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--surface);
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Hero */
+  .hero {
+    padding: 100px 0 80px;
+    text-align: center;
+  }
+  .hero .badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 99px;
+    background: rgba(124,92,252,0.15);
+    border: 1px solid rgba(124,92,252,0.3);
+    font-size: 0.78rem;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #fff 40%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 600px;
+    margin: 0 auto 40px;
+    line-height: 1.7;
+  }
+  .hero .cta-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* Demo embed */
+  .demo-section {
+    padding: 0 0 80px;
+  }
+  .demo-embed {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+    aspect-ratio: 16/9;
+  }
+  .demo-embed iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  /* Features */
+  .features { padding: 80px 0; }
+  .section-label {
+    text-align: center;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .section-title {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 60px;
+  }
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .feature-card {
+    padding: 24px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .feature-card:hover {
+    border-color: rgba(124,92,252,0.4);
+    transform: translateY(-2px);
+  }
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    font-size: 1.2rem;
+  }
+  .feature-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .feature-card p {
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* How it works */
+  .how { padding: 80px 0; }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 24px;
+    margin-top: 60px;
+  }
+  .step {
+    text-align: center;
+    padding: 28px 20px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .step-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+  }
+  .step h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 8px; }
+  .step p { font-size: 0.85rem; color: var(--muted); }
+
+  /* Generators */
+  .generators { padding: 80px 0; }
+  .gen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 40px;
+  }
+  .gen-card {
+    padding: 20px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .gen-card .gen-emoji { font-size: 2rem; margin-bottom: 10px; }
+  .gen-card h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
+  .gen-card p { font-size: 0.82rem; color: var(--muted); }
+
+  /* Footer CTA */
+  .footer-cta {
+    padding: 80px 0;
+    text-align: center;
+    border-top: 1px solid var(--border);
+  }
+  .footer-cta h2 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+  }
+  .footer-cta p {
+    color: var(--muted);
+    margin-bottom: 32px;
+    font-size: 1.05rem;
+  }
+
+  footer {
+    padding: 24px 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    nav .links { display: none; }
+    .hero { padding: 60px 0 50px; }
+    .hero h1 { font-size: 2rem; }
+    .feature-grid, .steps, .gen-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<!-- Nav -->
+<nav class="container">
+  <div class="logo">prompt<span>2</span>scene</div>
+  <div class="links">
+    <a href="#features">Features</a>
+    <a href="#how">How it works</a>
+    <a href="#generators">Generators</a>
+    <a href="#try">Try it</a>
+  </div>
+  <a href="#try" class="btn btn-primary">Launch App →</a>
+</nav>
+
+<!-- Hero -->
+<section class="hero container">
+  <div class="badge">✨ AI-Powered Visual Generation</div>
+  <h1>Text prompts.<br>Live visual scenes.</h1>
+  <p>Describe a scene in plain English — ASCII art, p5.js animations, procedural audio — generated on the fly, synced to your beat.</p>
+  <div class="cta-group">
+    <a href="#try" class="btn btn-primary">Open the Demo →</a>
+    <a href="#how" class="btn btn-outline">How it works</a>
+  </div>
+</section>
+
+<!-- Demo -->
+<section class="demo-section container" id="try">
+  <div class="demo-embed">
+    <iframe src="/ui/index.html" title="Prompt-to-Scene Demo" loading="lazy"></iframe>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features container" id="features">
+  <div class="section-label">What you get</div>
+  <div class="section-title">Everything a scene needs</div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(124,92,252,0.15)">🎨</div>
+      <h3>AI Scene Director</h3>
+      <p>A language model reads your prompt and designs a complete scene — mood, tempo, palette, motion, structure — ready to render.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(92,225,230,0.12)">🎵</div>
+      <h3>Procedural Audio</h3>
+      <p>Web Audio API generates reactive music in real time — beat-synced visuals that pulse with the rhythm.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(252,92,125,0.12)">🌀</div>
+      <h3>Visual Styles</h3>
+      <p>8 distinct p5.js styles from geometric to cosmic — ASCII art, particle fields, Voronoi crystals, and more.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(124,252,92,0.1)">⚡</div>
+      <h3>No-LLM Fallback</h3>
+      <p>20 built-in presets work instantly without any API key. Surprise yourself with random generation.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(255,180,92,0.12)">🔗</div>
+      <h3>Share & Embed</h3>
+      <p>Every generated scene gets a shareable URL. Copy the embed code to drop it anywhere.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(180,92,255,0.12)">📦</div>
+      <h3>Docker-Ready</h3>
+      <p>Self-contained Docker image. Deploy to Railway, Render, Fly.io, or anywhere — one command.</p>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how container" id="how">
+  <div class="section-label">Simple process</div>
+  <div class="section-title">From prompt to scene in seconds</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Write a prompt</h3>
+      <p>Describe the mood, style, and energy you want. "A cosmic void with geometric pulse at 120BPM."</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>AI designs the scene</h3>
+      <p>The Director agent breaks your prompt into a structured scene spec — tempo, palette, shapes, motion.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Pick a generator</h3>
+      <p>Choose p5.js animation, 4-layer ASCII, or procedural audio. Each interprets the spec differently.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <h3>Share the result</h3>
+      <p>Get a shareable URL and embed code. The scene runs standalone in any browser.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Generators -->
+<section class="generators container" id="generators">
+  <div class="section-label">Output formats</div>
+  <div class="section-title">Three renderers, one spec</div>
+  <div class="gen-grid">
+    <div class="gen-card">
+      <div class="gen-emoji">◈</div>
+      <h4>p5.js Animations</h4>
+      <p>8 visual styles: geometric, organic, matrix, solar, cosmic, voronoi, neon, fractals</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">▓</div>
+      <h4>ASCII Art</h4>
+      <p>4-layer ASCII rendering with dynamic density, contrast, and temporal shimmer</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">♫</div>
+      <h4>Procedural Audio</h4>
+      <p>Beat-synced visuals from the Web Audio API — rainbow visualizers, tempo-reactive motion</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">🖼️</div>
+      <h4>Stitcher</h4>
+      <p>Chain scenes together and stitch with optional audio for longer experiences</p>
+    </div>
+  </div>
+</section>
+
+<!-- Footer CTA -->
+<section class="footer-cta container">
+  <h2>Ready to create?</h2>
+  <p>Start from a prompt or hit Surprise Me for instant inspiration.</p>
+  <a href="#try" class="btn btn-primary" style="font-size:1rem; padding:14px 32px">Launch the Demo →</a>
+</section>
+
+<footer class="container">
+  Prompt-to-Scene &mdash; Built with p5.js, Web Audio API, and AI scene intelligence
+</footer>
+</body>
+</html>

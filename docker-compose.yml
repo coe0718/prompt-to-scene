@@ -1,0 +1,22 @@
+services:
+  prompt-to-scene:
+    build: .
+    container_name: prompt-to-scene
+    restart: unless-stopped
+    ports:
+      - "7041:7041"
+    environment:
+      - NODE_ENV=production
+      # Add your API keys below (or set in .env):
+      # OPENROUTER_API_KEY=sk-...
+      # NVIDIA_API_KEY=nv-...
+    volumes:
+      # Mount .env from host if it exists, so keys don't go in the image
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7041/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
