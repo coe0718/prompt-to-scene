@@ -26,7 +26,7 @@ const LLM_ENDPOINTS = {
   },
   kimi: {
     url: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    model: 'meta/llama-3.1-70b-instruct',
+    model: 'moonshotai/kimi-k2.5',
     key: () => process.env.NVIDIA_API_KEY || '',
     headers: (key) => ({
       'Content-Type': 'application/json',
