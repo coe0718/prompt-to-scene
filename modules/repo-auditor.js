@@ -281,7 +281,7 @@ async function analyzeRepo(repoData) {
     try {
       const raw = await callLLM([
         { role: 'system', content: DEEP_ANALYSIS_SYSTEM },
-        { role: 'user', content: `Analyze these files:\n\n${chunkContent.slice(0, 12000)}` },
+        { role: 'user', content: `Analyze these files:\n\n${chunkContent.slice(0, 6000)}` },
       ], model);
       const parsed = JSON.parse(extractJSON(raw));
       deepResults.push(parsed);

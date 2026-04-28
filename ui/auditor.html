@@ -592,17 +592,27 @@ async function runAudit() {
 
   setStep('p-fetch', 'active');
 
+  // Elapsed timer for the waiting period
+  let elapsed = 0;
+  const timerEl = document.createElement('span');
+  timerEl.style.cssText = 'color:var(--muted);font-size:0.75rem;margin-left:8px;';
+  const timerInterval = setInterval(() => {
+    elapsed++;
+    timerEl.textContent = '(' + elapsed + 's)';
+  }, 1000);
+
   try {
     setStep('p-fetch', 'done');
     setStep('p-structural', 'active');
-    status.innerHTML = '<span class="spinner"></span> Analyzing architecture...';
+    status.innerHTML = '<span class="spinner"></span> Kimi K2.5 is thinking...';
+    status.appendChild(timerEl);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
     const resp = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo, maxFiles: 20 }),
+      body: JSON.stringify({ repo, maxFiles: 10 }),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -610,6 +620,7 @@ async function runAudit() {
     setStep('p-structural', 'done');
     setStep('p-deep', 'active');
     status.innerHTML = '<span class="spinner"></span> Deep code analysis...';
+    status.appendChild(timerEl);
 
     if (!resp.ok) {
       const err = await resp.text().catch(() => 'Unknown error');
@@ -619,16 +630,19 @@ async function runAudit() {
     setStep('p-deep', 'done');
     setStep('p-report', 'active');
     status.innerHTML = '<span class="spinner"></span> Generating report...';
+    status.appendChild(timerEl);
 
     const html = await resp.text();
 
     setStep('p-report', 'done');
     result.style.display = 'block';
     result.innerHTML = '<iframe srcdoc="' + escHtml(html) + '" title="Audit Report"></iframe>';
+    clearInterval(timerInterval);
     status.innerHTML = '<span style="color:var(--green);">Audit complete. Report loaded above.</span>';
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
   } catch(e) {
+    clearInterval(timerInterval);
     const msg = e.name === 'AbortError' ? 'Request timed out after 3 minutes. The LLM may be slow or unreachable.' : e.message;
     status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>';
     progress.style.display = 'none';
