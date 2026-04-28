@@ -61,7 +61,7 @@ const ROOT = __dirname;
 
 // ─── Require project modules ───────────────────────────────────────────────
 
-let director, p5jsGen, asciiGen, stitcher;
+let director, p5jsGen, asciiGen, stitcher, vision;
 
 try {
   director = require('./director/agent.js');
@@ -89,6 +89,13 @@ try {
 } catch(e) {
   console.warn('Stitcher not available:', e.message);
   stitcher = null;
+}
+
+try {
+  vision = require('./director/vision.js');
+} catch(e) {
+  console.warn('Vision module not available:', e.message);
+  vision = null;
 }
 
 let presets;
@@ -217,12 +224,15 @@ async function handleRequest(req, res) {
   if (url.pathname === '/api/generate/stitch' && method === 'POST') {
     return handleGenerateOutput(req, res, 'stitch');
   }
-  if (url.pathname === '/api/batch' && method === 'POST') {
-    return handleBatch(req, res);
-  }
+if (url.pathname === '/api/batch' && method === 'POST') {
+  return handleBatch(req, res);
+}
+if (url.pathname === '/api/generate-from-image' && method === 'POST') {
+  return handleGenerateFromImage(req, res);
+}
 
 // ── Landing page ───────────────────────────────────────────────────────────
- if (url.pathname === '/landing' || url.pathname === '/about') {
+if (url.pathname === '/landing' || url.pathname === '/about') {
   return serveFile(res, path.join(ROOT, 'ui', 'landing.html'));
  }
 
@@ -283,6 +293,78 @@ async function handleGenerate(req, res) {
     generation_time_ms: 0
   };
   console.log(`Preset: "${spec.scene?.name}" — ${spec.scene?.mood}, ${spec.scene?.tempo}BPM`);
+  jsonResponse(res, 200, spec);
+}
+
+async function handleGenerateFromImage(req, res) {
+  const body = await readBody(req);
+  const imageDataUrl = body.image;
+
+  if (!imageDataUrl || typeof imageDataUrl !== 'string') {
+    return jsonResponse(res, 400, { error: 'Missing or invalid image field (expecting data URL)' });
+  }
+
+  console.log('Image-to-Scene: calling vision model...');
+  const attributes = await vision.analyzeImage(imageDataUrl);
+  console.log(`Vision: mood=${attributes.mood}, style=${attributes.visual_style}, colors=${attributes.color_palette.join(',')}`);
+
+  // Seed the director with image-derived attributes
+  const seedPrompt = `${attributes.mood} ${attributes.visual_style} ${attributes.genre} scene with ${attributes.effects.join(', ')} effects, ${attributes.tempo}BPM`;
+
+  let spec;
+  let director_model = 'unknown';
+
+  if (director) {
+    try {
+      spec = await director.generateSpec(seedPrompt, { imageAttributes: attributes });
+      director_model = 'vision+director';
+    } catch (e) {
+      console.warn('Director failed after vision analysis:', e.message);
+    }
+  }
+
+  // Fallback: build spec directly from vision attributes
+  if (!spec) {
+    spec = {
+      visual: {
+        style: attributes.visual_style,
+        palette: attributes.color_palette,
+        effects: attributes.effects,
+        intensity: attributes.intensity,
+      },
+      scene: {
+        name: `${attributes.mood} ${attributes.genre}`,
+        mood: attributes.mood,
+        tempo: parseInt(attributes.tempo),
+        genre: attributes.genre,
+        duration_seconds: 45,
+        tags: attributes.tags,
+      },
+      audio: {
+        mood: attributes.mood,
+        genre: attributes.genre,
+        intensity: attributes.intensity,
+      },
+      director_model,
+    };
+  }
+
+  spec.metadata = {
+    source: 'image',
+    director_model: spec.metadata?.director_model || director_model,
+    vision: {
+      mood: attributes.mood,
+      visual_style: attributes.visual_style,
+      color_palette: attributes.color_palette,
+      effects: attributes.effects,
+      tempo: attributes.tempo,
+      genre: attributes.genre,
+      intensity: attributes.intensity,
+      tags: attributes.tags,
+    },
+    generated_at: new Date().toISOString(),
+  };
+
   jsonResponse(res, 200, spec);
 }
 
@@ -459,7 +541,8 @@ server.listen(PORT, () => {
   console.log('  POST /api/generate/ascii          → ASCII HTML (basic)');
   console.log('  POST /api/generate/ascii-enhanced → ASCII HTML (4-layer)');
   console.log('  POST /api/generate/procedural-audio → Procedural Audio HTML');
-  console.log('  POST /api/generate/stitch         → Stitcher HTML');
+ console.log(' POST /api/generate/stitch → Stitcher HTML');
+  console.log(' POST /api/generate-from-image → Image → Scene spec (VLM + Director)');
   console.log('');
   if (!director) console.warn('⚠ Director agent NOT loaded — LLM calls will fail.');
   else console.log('✓ Director agent ready');
@@ -469,5 +552,7 @@ server.listen(PORT, () => {
   else console.log('✓ ASCII generator ready');
   if (!stitcher) console.warn('⚠ Stitcher NOT loaded');
   else console.log('✓ Stitcher ready');
+  if (!vision) console.warn('⚠ Vision module NOT loaded');
+  else console.log('✓ Vision module ready (llama-3.2-90b-vision-instruct)');
   console.log('');
 });

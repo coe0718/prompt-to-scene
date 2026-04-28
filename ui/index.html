@@ -335,9 +335,21 @@
       <div style="font-size:11px;color:var(--dim);">Drop MP3 — auto-visualize</div>
       <div id="track-status" style="font-size:10px;color:var(--green);margin-top:4px;"></div>
     </div>
-    <input type="file" id="audio-upload-big" accept="audio/mpeg,audio/wav,audio/ogg,audio/flac" style="display:none" onchange="handleTrackDrop(this.files)">
+<input type="file" id="audio-upload-big" accept="audio/mpeg,audio/wav,audio/ogg,audio/flac" style="display:none" onchange="handleTrackDrop(this.files)">
 
-    <!-- Path 2: Create a Scene -->
+<!-- Path 1.5: Image-to-Scene -->
+<div id="path-image" style="flex:1;min-width:200px;padding:12px;background:var(--surface);border:2px dashed var(--border);border-radius:10px;cursor:pointer;text-align:center;transition:border-color 0.2s;"
+onclick="document.getElementById('image-upload-big').click()"
+ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+ondragleave="this.style.borderColor='var(--border)'"
+ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleImageDrop(event.dataTransfer.files)">
+<div style="font-size:16px;margin-bottom:2px;">🖼️ <b>Image-to-Scene</b></div>
+<div style="font-size:11px;color:var(--dim);">Drop image — AI scene</div>
+<div id="image-status" style="font-size:10px;color:var(--green);margin-top:4px;"></div>
+</div>
+<input type="file" id="image-upload-big" accept="image/*" style="display:none" onchange="handleImageDrop(this.files)">
+
+<!-- Path 2: Create a Scene -->
     <div id="path-scene" style="flex:2;min-width:320px;">
       <div style="font-size:14px;margin-bottom:6px;color:var(--accent);">✨ <b>Create a Scene</b></div>
       <div class="prompt-bar" style="max-width:100%;margin-bottom:6px;">
@@ -1335,8 +1347,91 @@ function handleTrackDrop(files) {
 
     const kb = (uploadedAudioDataUrl.length / 1024).toFixed(0);
     document.getElementById('uploaded-name').textContent = '🎵 ' + file.name.slice(0, 16) + ' (' + kb + 'KB)';
-  };
-  reader.readAsDataURL(file);
+};
+reader.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IMAGE-TO-SCENE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function handleImageDrop(files) {
+ const file = files[0];
+ if (!file) return;
+
+ // Validate it's an image
+ if (!file.type.startsWith('image/')) {
+   const status = document.getElementById('image-status');
+   status.textContent = '❌ Not an image file';
+   status.style.color = 'var(--red)';
+   return;
+ }
+
+ const status = document.getElementById('image-status');
+ status.textContent = '⏳ Analyzing image...';
+ status.style.color = 'var(--yellow)';
+
+ const reader = new FileReader();
+ reader.onload = async function(e) {
+   const imageDataUrl = e.target.result;
+
+   try {
+     const res = await fetch('/api/generate-from-image', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ image: imageDataUrl }),
+     });
+
+     if (!res.ok) {
+       const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+       throw new Error(err.error || `HTTP ${res.status}`);
+     }
+
+     const spec = await res.json();
+
+     // Store in catalog
+     const key = 'img-' + Date.now();
+     SCENES[key] = spec;
+     activeScene = key;
+     newSceneSpec = spec;
+     renderSceneList();
+     showSceneSpec(spec);
+
+     // Auto-generate p5.js visual
+     const genRes = await fetch('/api/generate/p5js', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(spec),
+     });
+     if (genRes.ok) {
+       const html = await genRes.text();
+       const blob = new Blob([html], { type: 'text/html' });
+       const url = URL.createObjectURL(blob);
+       generatedOutputs.final = url;
+       document.getElementById('frame-final').src = url;
+       document.getElementById('frame-final').style.display = 'block';
+       const ph = document.getElementById('placeholder-final');
+       if (ph) ph.style.display = 'none';
+     }
+
+     switchTab('final');
+     document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+     document.getElementById('status-scene').textContent = (spec.scene && spec.scene.name) || 'Image Scene';
+     document.getElementById('status-duration').textContent = (spec.scene && spec.scene.duration_seconds) + 's' || '45s';
+
+     const kb = (imageDataUrl.length / 1024).toFixed(0);
+     document.getElementById('uploaded-name').textContent = '🖼️ ' + file.name.slice(0, 16) + ' (' + kb + 'KB)';
+
+     status.textContent = '✅ ' + ((spec.scene && spec.scene.mood) || 'Done');
+     status.style.color = 'var(--green)';
+
+   } catch(err) {
+     console.error('Image-to-Scene error:', err);
+     status.textContent = '❌ ' + err.message;
+     status.style.color = 'var(--red)';
+   }
+ };
+ reader.readAsDataURL(file);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
