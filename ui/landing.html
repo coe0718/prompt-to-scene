@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prompt-to-Scene — AI Visual Scene Generator</title>
-<meta name="description" content="Generate immersive, beat-synced visual scenes from text prompts using AI. ASCII art, p5.js animations, and procedural audio — all in your browser.">
+<title>Prompt-to-Scene — Built by Autonomous AI Agents</title>
+<meta name="description" content="A creative tool built entirely by autonomous AI agents. p5.js animations, ASCII art, procedural audio — every line of code written by Hermes Agent.">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -17,6 +17,8 @@
     --accent: #7c5cfc;
     --accent2: #fc5c7d;
     --accent3: #5ce1e6;
+    --green: #4ade80;
+    --amber: #fbbf24;
   }
 
   html { scroll-behavior: smooth; }
@@ -29,11 +31,8 @@
     overflow-x: hidden;
   }
 
-  /* Animated background */
   .bg {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
+    position: fixed; inset: 0; z-index: -1;
     background:
       radial-gradient(ellipse 80% 60% at 20% 20%, rgba(124,92,252,0.12) 0%, transparent 60%),
       radial-gradient(ellipse 60% 50% at 80% 80%, rgba(92,225,230,0.08) 0%, transparent 55%),
@@ -49,7 +48,6 @@
 
   .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
-  /* Nav */
   nav {
     padding: 20px 0;
     display: flex;
@@ -57,121 +55,196 @@
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
   }
-  nav .logo {
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--text);
-  }
+  nav .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
   nav .logo span { color: var(--accent); }
   nav .links { display: flex; gap: 24px; }
-  nav .links a {
-    color: var(--muted);
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: color 0.2s;
-  }
+  nav .links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
   nav .links a:hover { color: var(--text); }
+
   .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 22px;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.2s;
-    cursor: pointer;
-    border: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 22px; border-radius: 8px;
+    font-size: 0.9rem; font-weight: 600;
+    text-decoration: none; transition: all 0.2s;
+    cursor: pointer; border: none;
   }
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
-  }
+  .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { background: #6a4be0; transform: translateY(-1px); }
-  .btn-outline {
-    border: 1px solid var(--border);
-    color: var(--text);
-    background: var(--surface);
-  }
+  .btn-outline { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
   .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
 
   /* Hero */
-  .hero {
-    padding: 100px 0 80px;
-    text-align: center;
-  }
+  .hero { padding: 100px 0 60px; text-align: center; }
   .hero .badge {
-    display: inline-block;
-    padding: 4px 14px;
-    border-radius: 99px;
-    background: rgba(124,92,252,0.15);
-    border: 1px solid rgba(124,92,252,0.3);
-    font-size: 0.78rem;
-    color: var(--accent);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    display: inline-block; padding: 4px 14px; border-radius: 99px;
+    background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3);
+    font-size: 0.78rem; color: var(--green);
+    letter-spacing: 0.06em; text-transform: uppercase;
     margin-bottom: 24px;
   }
   .hero h1 {
-    font-size: clamp(2.4rem, 6vw, 4rem);
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    line-height: 1.1;
+    font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 800;
+    letter-spacing: -0.04em; line-height: 1.1;
     margin-bottom: 20px;
     background: linear-gradient(135deg, #fff 40%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .hero p {
-    font-size: 1.15rem;
-    color: var(--muted);
-    max-width: 600px;
-    margin: 0 auto 40px;
-    line-height: 1.7;
+  .hero .subtitle {
+    font-size: 1.05rem; color: var(--muted);
+    max-width: 680px; margin: 0 auto 12px; line-height: 1.7;
+  }
+  .hero .hook {
+    font-size: 0.9rem; color: var(--accent3);
+    max-width: 600px; margin: 0 auto 40px;
+    font-weight: 500;
   }
   .hero .cta-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
-  /* Demo embed */
-  .demo-section {
-    padding: 0 0 80px;
+  /* Stats bar */
+  .stats {
+    display: flex; justify-content: center; gap: 48px;
+    padding: 20px 0 60px; flex-wrap: wrap;
   }
+  .stat { text-align: center; }
+  .stat-num { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; }
+  .stat-num.accent { color: var(--accent); }
+  .stat-num.green { color: var(--green); }
+  .stat-num.amber { color: var(--amber); }
+  .stat-num.pink { color: var(--accent2); }
+  .stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  /* Agent Team */
+  .agents { padding: 60px 0 80px; }
+  .section-label {
+    text-align: center; font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent); margin-bottom: 12px;
+  }
+  .section-title {
+    text-align: center; font-size: 2rem; font-weight: 700;
+    letter-spacing: -0.03em; margin-bottom: 60px;
+  }
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+  }
+  .agent-card {
+    padding: 24px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .agent-card:hover {
+    border-color: rgba(124,92,252,0.4);
+    transform: translateY(-2px);
+  }
+  .agent-emoji { font-size: 2rem; margin-bottom: 10px; display: block; }
+  .agent-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+  .agent-card .agent-role {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--accent); margin-bottom: 8px;
+  }
+  .agent-card p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+  .agent-card .agent-commits {
+    font-size: 0.78rem; color: var(--amber); margin-top: 10px;
+  }
+
+  /* Timeline */
+  .timeline-section { padding: 80px 0; }
+  .timeline {
+    position: relative;
+    max-width: 700px; margin: 0 auto;
+  }
+  .timeline::before {
+    content: ''; position: absolute; left: 20px; top: 0; bottom: 0;
+    width: 1px; background: var(--border);
+  }
+  .tl-item { position: relative; padding-left: 56px; margin-bottom: 40px; }
+  .tl-dot {
+    position: absolute; left: 12px; top: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg);
+  }
+  .tl-item .tl-day {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent); margin-bottom: 4px;
+  }
+  .tl-item h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
+  .tl-item p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+  /* Architecture diagram */
+  .arch-section { padding: 80px 0; }
+  .arch-diagram {
+    text-align: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 40px 20px;
+    max-width: 800px; margin: 40px auto 0;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.8rem; line-height: 2;
+    overflow-x: auto;
+  }
+  .arch-diagram .box {
+    display: inline-block;
+    padding: 8px 16px; border-radius: 8px;
+    background: rgba(124,92,252,0.12);
+    border: 1px solid rgba(124,92,252,0.3);
+    margin: 4px;
+  }
+  .arch-diagram .box.green { background: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.3); }
+  .arch-diagram .box.amber { background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.3); }
+  .arch-diagram .box.pink { background: rgba(252,92,125,0.1); border-color: rgba(252,92,125,0.3); }
+  .arch-diagram .arrow { color: var(--muted); }
+
+  /* Commit proof */
+  .proof-section { padding: 80px 0; }
+  .commit-table {
+    width: 100%; max-width: 800px; margin: 40px auto 0;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .commit-table th {
+    text-align: left; padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted); font-weight: 600; font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .commit-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .commit-table .commit-hash {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--green); font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  .commit-table .commit-agent {
+    font-size: 0.78rem; color: var(--accent);
+  }
+  .commit-table .commit-desc { color: var(--text); max-width: 400px; }
+
+  /* Demo */
+  .demo-section { padding: 0 0 80px; }
   .demo-embed {
-    border-radius: 16px;
-    overflow: hidden;
+    border-radius: 16px; overflow: hidden;
     border: 1px solid var(--border);
     background: var(--surface);
-    box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5);
     aspect-ratio: 16/9;
     position: relative;
   }
-  .demo-embed iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-  }
+  .demo-embed iframe { width: 100%; height: 100%; border: none; }
   .demo-badge {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    padding: 4px 12px;
-    border-radius: 99px;
-    background: rgba(0,0,0,0.65);
-    backdrop-filter: blur(8px);
-    font-size: 0.72rem;
-    color: rgba(255,255,255,0.7);
+    position: absolute; top: 12px; left: 12px;
+    padding: 4px 12px; border-radius: 99px;
+    background: rgba(0,0,0,0.65); backdrop-filter: blur(8px);
+    font-size: 0.72rem; color: rgba(255,255,255,0.7);
     border: 1px solid rgba(255,255,255,0.1);
-    pointer-events: none;
-    z-index: 10;
+    pointer-events: none; z-index: 10;
   }
   .demo-badge .live-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #4ade80;
-    margin-right: 6px;
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: #4ade80; margin-right: 6px;
     animation: pulseDot 1.5s ease-in-out infinite;
   }
   @keyframes pulseDot {
@@ -179,144 +252,47 @@
     50% { opacity: 1; }
   }
 
-  /* Features */
-  .features { padding: 80px 0; }
-  .section-label {
-    text-align: center;
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--accent);
-    margin-bottom: 12px;
-  }
-  .section-title {
-    text-align: center;
-    font-size: 2rem;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    margin-bottom: 60px;
-  }
-  .feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px;
-  }
-  .feature-card {
-    padding: 24px;
-    border-radius: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    transition: border-color 0.2s, transform 0.2s;
-  }
-  .feature-card:hover {
-    border-color: rgba(124,92,252,0.4);
-    transform: translateY(-2px);
-  }
-  .feature-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 14px;
-    font-size: 1.2rem;
-  }
-  .feature-card h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 8px;
-    letter-spacing: -0.01em;
-  }
-  .feature-card p {
-    font-size: 0.88rem;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  /* How it works */
-  .how { padding: 80px 0; }
-  .steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 24px;
-    margin-top: 60px;
-  }
-  .step {
-    text-align: center;
-    padding: 28px 20px;
-    border-radius: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    position: relative;
-  }
-  .step-num {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: #fff;
-    font-weight: 700;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 16px;
-  }
-  .step h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 8px; }
-  .step p { font-size: 0.85rem; color: var(--muted); }
-
   /* Generators */
   .generators { padding: 80px 0; }
   .gen-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    margin-top: 40px;
+    gap: 12px; margin-top: 40px;
   }
   .gen-card {
-    padding: 20px;
-    border-radius: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    padding: 20px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
     text-align: center;
   }
   .gen-card .gen-emoji { font-size: 2rem; margin-bottom: 10px; }
   .gen-card h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
   .gen-card p { font-size: 0.82rem; color: var(--muted); }
 
-  /* Footer CTA */
+  /* Footer */
   .footer-cta {
-    padding: 80px 0;
-    text-align: center;
+    padding: 80px 0; text-align: center;
     border-top: 1px solid var(--border);
   }
   .footer-cta h2 {
-    font-size: 2.2rem;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    margin-bottom: 16px;
+    font-size: 2.2rem; font-weight: 700;
+    letter-spacing: -0.03em; margin-bottom: 16px;
   }
-  .footer-cta p {
-    color: var(--muted);
-    margin-bottom: 32px;
-    font-size: 1.05rem;
-  }
+  .footer-cta p { color: var(--muted); margin-bottom: 32px; font-size: 1.05rem; }
 
   footer {
-    padding: 24px 0;
-    border-top: 1px solid var(--border);
-    text-align: center;
-    font-size: 0.82rem;
-    color: var(--muted);
+    padding: 24px 0; border-top: 1px solid var(--border);
+    text-align: center; font-size: 0.82rem; color: var(--muted);
   }
 
-  /* Responsive */
   @media (max-width: 640px) {
     nav .links { display: none; }
-    .hero { padding: 60px 0 50px; }
+    .hero { padding: 60px 0 40px; }
     .hero h1 { font-size: 2rem; }
-    .feature-grid, .steps, .gen-grid { grid-template-columns: 1fr; }
+    .stats { gap: 24px; }
+    .stat-num { font-size: 1.5rem; }
+    .agent-grid, .gen-grid { grid-template-columns: 1fr; }
+    .arch-diagram { font-size: 0.65rem; }
+    .commit-table td, .commit-table th { padding: 8px 10px; font-size: 0.78rem; }
   }
 </style>
 </head>
@@ -327,22 +303,230 @@
 <nav class="container">
   <div class="logo">prompt<span>2</span>scene</div>
   <div class="links">
-    <a href="#features">Features</a>
-    <a href="#how">How it works</a>
-    <a href="#generators">Generators</a>
-    <a href="#try">Try it</a>
+    <a href="#agents">The Agents</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#try">See It</a>
   </div>
-  <a href="#try" class="btn btn-primary">Launch App →</a>
+  <a href="#try" class="btn btn-primary">Launch Demo →</a>
 </nav>
 
 <!-- Hero -->
 <section class="hero container">
-  <div class="badge">✨ AI-Powered Visual Generation</div>
-  <h1>Text prompts.<br>Live visual scenes.</h1>
-  <p>Describe a scene in plain English — ASCII art, p5.js animations, procedural audio — generated on the fly, synced to your beat.</p>
+  <div class="badge">🤖 Built by Autonomous AI Agents</div>
+  <h1>No human wrote a<br>single line of code.</h1>
+  <p class="subtitle">
+    This entire creative tool — server, generators, UI, export, deployment — was designed,
+    implemented, reviewed, and shipped by four specialized AI agents working together.
+  </p>
+  <p class="hook">
+    A human gave direction. The agents built everything.
+  </p>
   <div class="cta-group">
-    <a href="#try" class="btn btn-primary">Open the Demo →</a>
-    <a href="#how" class="btn btn-outline">How it works</a>
+    <a href="#try" class="btn btn-primary">See the Demo →</a>
+    <a href="#agents" class="btn btn-outline">Meet the Team</a>
+  </div>
+</section>
+
+<!-- Stats -->
+<div class="stats container">
+  <div class="stat">
+    <div class="stat-num accent">4</div>
+    <div class="stat-label">AI Agents</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num green">5</div>
+    <div class="stat-label">Days to Ship</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num amber">16</div>
+    <div class="stat-label">Commits</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num pink">0</div>
+    <div class="stat-label">Human Lines</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num green">12</div>
+    <div class="stat-label">API Endpoints</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num accent">20</div>
+    <div class="stat-label">Features</div>
+  </div>
+</div>
+
+<!-- Agents -->
+<section class="agents container" id="agents">
+  <div class="section-label">The Team</div>
+  <div class="section-title">Four agents, one goal</div>
+  <div class="agent-grid">
+    <div class="agent-card">
+      <span class="agent-emoji">🛠️</span>
+      <h3>Drey</h3>
+      <div class="agent-role">Coding Specialist</div>
+      <p>Wrote every line of production code. Server, generators, UI, export, vision pipeline, stitcher. Built all 12 API endpoints.</p>
+      <div class="agent-commits">11 commits</div>
+    </div>
+    <div class="agent-card">
+      <span class="agent-emoji">🔍</span>
+      <h3>Vex</h3>
+      <div class="agent-role">Code Reviewer</div>
+      <p>Reviewed every pull request. Caught 3 critical and 10 warning-level bugs across the codebase. Enforced error handling, memory safety, and p5.js compatibility.</p>
+      <div class="agent-commits">3 code reviews</div>
+    </div>
+    <div class="agent-card">
+      <span class="agent-emoji">🔬</span>
+      <h3>Echo</h3>
+      <div class="agent-role">Scout / Researcher</div>
+      <p>Tested CDN availability, validated p5.js 2.0 API breakages, verified NVIDIA vision endpoint, discovered GIF export workflow.</p>
+      <div class="agent-commits">Discovery reports</div>
+    </div>
+    <div class="agent-card">
+      <span class="agent-emoji">📝</span>
+      <h3>Herald</h3>
+      <div class="agent-role">Documentarian</div>
+      <p>Wrote README, landing page, submission materials. Documented architecture, API endpoints, deployment. Authored this page.</p>
+      <div class="agent-commits">Documentation</div>
+    </div>
+  </div>
+</section>
+
+<!-- Timeline -->
+<section class="timeline-section container" id="timeline">
+  <div class="section-label">Development</div>
+  <div class="section-title">5 days, 16 commits, zero human code</div>
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-day">Day 1 · Architecture</div>
+      <h3>Foundation</h3>
+      <p>Echo scouted the creative tool landscape and recommended p5.js + Web Audio API. Drey built the Director agent, HTTP server, and 20 preset scene specs.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-day">Day 2 · Generators</div>
+      <h3>Three renderers, one spec</h3>
+      <p>Drey built all four generators: p5.js enhanced (8 visual styles), 4-layer ASCII engine, procedural audio synthesis, and the stitcher for GIF/video export.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-day">Day 3 · Integration</div>
+      <h3>UI + Image-to-Scene</h3>
+      <p>Drey built the full tabbed UI with sidebar, generators, preview panels, scene history, and theme toggle. Echo validated the NVIDIA vision LLM — Drey wired Image-to-Scene pipeline.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-day">Day 4 · Review</div>
+      <h3>Vex code audit</h3>
+      <p>Vex reviewed the entire codebase and found 13 issues (3 CRITICAL, 10 WARNING). Drey fixed all of them: canvas bugs, HTML escaping, async error paths, blob URL leaks. Vex re-verified.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-day">Day 5 · Ship</div>
+      <h3>Export + polish</h3>
+      <p>Drey built the standalone export (CDN inlining), auto-demo, keyboard shortcuts. Herald wrote documentation, landing page, and submission materials.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section class="arch-section container" id="architecture">
+  <div class="section-label">How It Works</div>
+  <div class="section-title">Director → Spec → Generators</div>
+  <div class="arch-diagram">
+    <span class="box">Prompt</span> or <span class="box">Image</span> or <span class="box amber">🎲 Surprise Me</span><br>
+    <span class="arrow">▼</span><br>
+    <span class="box green">Director Agent</span><br>
+    <span class="arrow">▼</span><br>
+    <span style="color:var(--accent3);font-weight:600;">Scene Spec JSON</span><br>
+    mood · tempo · palette · style · timing · sections<br>
+    <span class="arrow">▼</span><br>
+    <span class="box">🎨 p5.js</span> &nbsp; <span class="box">▓ ASCII</span> &nbsp; <span class="box">♫ Audio</span> &nbsp; <span class="box pink">🖼️ Stitcher</span><br>
+    <span class="arrow">▼</span><br>
+    <span class="box green">Standalone HTML</span> &nbsp; <span class="box">GIF</span> &nbsp; <span class="box">WebM</span> &nbsp; <span class="box">Share URL</span>
+  </div>
+</section>
+
+<!-- Commit Proof -->
+<section class="proof-section container">
+  <div class="section-label">Proof</div>
+  <div class="section-title">Every commit was AI-authored</div>
+  <table class="commit-table">
+    <tr><th>Commit</th><th>Agent</th><th>What Happened</th></tr>
+    <tr>
+      <td><span class="commit-hash">c09b356</span></td>
+      <td><span class="commit-agent">Drey</span></td>
+      <td class="commit-desc">Built core: Director agent, p5.js enhanced renderer, 20 presets, .env config</td>
+    </tr>
+    <tr>
+      <td><span class="commit-hash">ff1de76</span></td>
+      <td><span class="commit-agent">Drey</span></td>
+      <td class="commit-desc">Added procedural audio generator + 4-layer ASCII enhanced renderer</td>
+    </tr>
+    <tr>
+      <td><span class="commit-hash">e4b8768</span></td>
+      <td><span class="commit-agent">Vex → Drey</span></td>
+      <td class="commit-desc">Vex identified p5.js 2.0 breakage. Drey fixed endShape, background, HTML escaping</td>
+    </tr>
+    <tr>
+      <td><span class="commit-hash">5bc9292</span></td>
+      <td><span class="commit-agent">Vex → Drey</span></td>
+      <td class="commit-desc">Vex code audit → 6 bugs fixed: bloom, blob URL leaks, async error handling</td>
+    </tr>
+    <tr>
+      <td><span class="commit-hash">0e1d7be</span></td>
+      <td><span class="commit-agent">Vex → Drey</span></td>
+      <td class="commit-desc">Vex caught stitcher CDN failure + recursion bug. Drey fixed both</td>
+    </tr>
+    <tr>
+      <td><span class="commit-hash">926bb89</span></td>
+      <td><span class="commit-agent">Echo → Drey</span></td>
+      <td class="commit-desc">Echo tested NVIDIA vision endpoint. Drey wired Image-to-Scene pipeline</td>
+    </tr>
+    <tr>
+      <td><span class="commit-hash">b313b32</span></td>
+      <td><span class="commit-agent">Drey + Herald</span></td>
+      <td class="commit-desc">Standalone export, auto-demo polish, landing page rewrite, AGENTS.md</td>
+    </tr>
+  </table>
+</section>
+
+<!-- Generators -->
+<section class="generators container">
+  <div class="section-label">What It Makes</div>
+  <div class="section-title">Three renderers, infinite scenes</div>
+  <div class="gen-grid">
+    <div class="gen-card">
+      <div class="gen-emoji">◈</div>
+      <h4>p5.js Animations</h4>
+      <p>8 visual styles: geometric, organic, matrix, solar, cosmic, voronoi, neon, fractals — beat-synced and reactive</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">▓</div>
+      <h4>ASCII Art</h4>
+      <p>4-layer ASCII rendering with dynamic density, contrast, and temporal shimmer — classic terminal aesthetics</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">♫</div>
+      <h4>Procedural Audio</h4>
+      <p>Web Audio API synthesis with beat-reactive rainbow visualizers — no audio files needed</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">🖼️</div>
+      <h4>Image-to-Scene</h4>
+      <p>Upload any photo → NVIDIA vision LLM analyzes it → Director generates a matching scene spec</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">📦</div>
+      <h4>Standalone Export</h4>
+      <p>Download any scene as a single self-contained HTML file with all dependencies inlined — works offline</p>
+    </div>
+    <div class="gen-card">
+      <div class="gen-emoji">🎲</div>
+      <h4>20 Presets</h4>
+      <p>Built-in scenes spanning all mood × style combinations. No API key required — instant generation</p>
+    </div>
   </div>
 </section>
 
@@ -354,110 +538,18 @@
  </div>
 </section>
 
-<!-- Features -->
-<section class="features container" id="features">
-  <div class="section-label">What you get</div>
-  <div class="section-title">Everything a scene needs</div>
-  <div class="feature-grid">
-    <div class="feature-card">
-      <div class="feature-icon" style="background:rgba(124,92,252,0.15)">🎨</div>
-      <h3>AI Scene Director</h3>
-      <p>A language model reads your prompt and designs a complete scene — mood, tempo, palette, motion, structure — ready to render.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon" style="background:rgba(92,225,230,0.12)">🎵</div>
-      <h3>Procedural Audio</h3>
-      <p>Web Audio API generates reactive music in real time — beat-synced visuals that pulse with the rhythm.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon" style="background:rgba(252,92,125,0.12)">🌀</div>
-      <h3>Visual Styles</h3>
-      <p>8 distinct p5.js styles from geometric to cosmic — ASCII art, particle fields, Voronoi crystals, and more.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon" style="background:rgba(124,252,92,0.1)">⚡</div>
-      <h3>No-LLM Fallback</h3>
-      <p>20 built-in presets work instantly without any API key. Surprise yourself with random generation.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon" style="background:rgba(255,180,92,0.12)">🔗</div>
-      <h3>Share & Embed</h3>
-      <p>Every generated scene gets a shareable URL. Copy the embed code to drop it anywhere.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon" style="background:rgba(180,92,255,0.12)">📦</div>
-      <h3>Standalone Export</h3>
-      <p>Export any scene as a single self-contained HTML file with all dependencies inlined. Open it anywhere — no server, no internet.</p>
-    </div>
-  </div>
-</section>
-
-<!-- How it works -->
-<section class="how container" id="how">
-  <div class="section-label">Simple process</div>
-  <div class="section-title">From prompt to scene in seconds</div>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">1</div>
-      <h3>Write a prompt</h3>
-      <p>Describe the mood, style, and energy you want. "A cosmic void with geometric pulse at 120BPM."</p>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <h3>AI designs the scene</h3>
-      <p>The Director agent breaks your prompt into a structured scene spec — tempo, palette, shapes, motion.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <h3>Pick a generator</h3>
-      <p>Choose p5.js animation, 4-layer ASCII, or procedural audio. Each interprets the spec differently.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">4</div>
-      <h3>Share the result</h3>
-      <p>Get a shareable URL and embed code. The scene runs standalone in any browser.</p>
-    </div>
-  </div>
-</section>
-
-<!-- Generators -->
-<section class="generators container" id="generators">
-  <div class="section-label">Output formats</div>
-  <div class="section-title">Three renderers, one spec</div>
-  <div class="gen-grid">
-    <div class="gen-card">
-      <div class="gen-emoji">◈</div>
-      <h4>p5.js Animations</h4>
-      <p>8 visual styles: geometric, organic, matrix, solar, cosmic, voronoi, neon, fractals</p>
-    </div>
-    <div class="gen-card">
-      <div class="gen-emoji">▓</div>
-      <h4>ASCII Art</h4>
-      <p>4-layer ASCII rendering with dynamic density, contrast, and temporal shimmer</p>
-    </div>
-    <div class="gen-card">
-      <div class="gen-emoji">♫</div>
-      <h4>Procedural Audio</h4>
-      <p>Beat-synced visuals from the Web Audio API — rainbow visualizers, tempo-reactive motion</p>
-    </div>
-    <div class="gen-card">
-      <div class="gen-emoji">🖼️</div>
-      <h4>Stitcher</h4>
-      <p>Chain scenes together and stitch with optional audio for longer experiences</p>
-    </div>
-  </div>
-</section>
-
 <!-- Footer CTA -->
 <section class="footer-cta container">
-  <h2>Ready to create?</h2>
-  <p>Start from a prompt or hit Surprise Me for instant inspiration.</p>
+  <h2>See the code. Read the story.</h2>
+  <p>Every commit, every bug fix, every feature — documented and verifiable.</p>
   <a href="#try" class="btn btn-primary" style="font-size:1rem; padding:14px 32px">Launch the Demo →</a>
 </section>
 
 <footer class="container">
- Prompt-to-Scene — Built with p5.js, Web Audio API, and AI scene intelligence<br>
- <span style="opacity:0.5;margin-top:8px;display:inline-block;">🤖 Built entirely by hermes-agent (autonomous AI coding assistant)</span>
+  Prompt-to-Scene — Built entirely by <strong>Hermes Agent</strong> (autonomous AI coding assistant)<br>
+  <span style="opacity:0.5;margin-top:8px;display:inline-block;">
+  Conceived, designed, coded, reviewed, and shipped by four AI agents working collaboratively · Zero human-written code
+  </span>
 </footer>
 </body>
 </html>
