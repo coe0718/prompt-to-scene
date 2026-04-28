@@ -62,7 +62,7 @@ const ROOT = __dirname;
 
 // ─── Require project modules ───────────────────────────────────────────────
 
-let director, p5jsGen, asciiGen, stitcher, vision;
+let director, p5jsGen, asciiGen, stitcher, vision, repoFetcher, repoAuditor, reportGen;
 
 try {
   director = require('./director/agent.js');
@@ -83,6 +83,15 @@ try {
 } catch(e) {
   console.warn('ASCII generator not available:', e.message);
   asciiGen = null;
+}
+
+try {
+  repoFetcher = require('./modules/repo-fetcher.js');
+  repoAuditor = require('./modules/repo-auditor.js');
+  reportGen = require('./modules/report-generator.js');
+  console.log('✓ Repo Auditor modules loaded');
+} catch(e) {
+  console.warn('Repo Auditor modules not available:', e.message);
 }
 
 try {
@@ -347,11 +356,19 @@ if (url.pathname === '/api/generate-from-image' && method === 'POST') {
 if (url.pathname === '/api/export' && method === 'POST') {
   return handleExport(req, res);
 }
+if (url.pathname === '/api/audit' && method === 'POST') {
+  return handleAudit(req, res);
+}
 
 // ── Landing page ───────────────────────────────────────────────────────────
 if (url.pathname === '/landing' || url.pathname === '/about') {
   return serveFile(res, path.join(ROOT, 'ui', 'landing.html'));
- }
+}
+
+// ── Repo Auditor page ──────────────────────────────────────────────────
+if (url.pathname === '/audit') {
+  return serveFile(res, path.join(ROOT, 'ui', 'auditor.html'));
+}
 
  // ── Static files ──
  if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -641,6 +658,47 @@ async function handleBatch(req, res) {
   });
 }
 
+// ─── Repo Audit Handler ─────────────────────────────────────────────────────
+
+async function handleAudit(req, res) {
+  const body = await readBody(req);
+  const repoUrl = body.repo || body.url;
+
+  if (!repoUrl) {
+    return jsonResponse(res, 400, { error: 'Missing repo URL. Send { repo: \"user/repo\" }' });
+  }
+
+  if (!repoFetcher || !repoAuditor || !reportGen) {
+    return jsonResponse(res, 500, { error: 'Auditor modules not loaded' });
+  }
+
+  console.log(`Audit: Fetching ${repoUrl}...`);
+  try {
+    const repoData = await repoFetcher.fetchRepo(repoUrl, { maxFiles: body.maxFiles || 20 });
+    console.log(`Audit: Analyzing ${repoData.metadata.full_name} (${repoData.files.length} files)...`);
+
+    const result = await repoAuditor.analyzeRepo(repoData);
+
+    // Generate PR fix plan if requested
+    let prPlan = null;
+    if (body.generate_pr) {
+      prPlan = await repoAuditor.generateFixPR(result, repoUrl);
+    }
+
+    // Generate HTML report
+    const htmlReport = reportGen.generateReport(result, repoUrl);
+
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(htmlReport);
+  } catch(e) {
+    console.error(`Audit error for ${repoUrl}:`, e.message);
+    jsonResponse(res, 500, { error: 'Audit failed: ' + e.message.slice(0, 200) });
+  }
+}
+
 // ─── Start ─────────────────────────────────────────────────────────────────
 
 const server = http.createServer(handleRequest);
@@ -661,6 +719,8 @@ server.listen(PORT, () => {
  console.log(' POST /api/generate/stitch → Stitcher HTML');
   console.log('  POST /api/generate-from-image → Image → Scene spec (VLM + Director)');
   console.log('  POST /api/export → Download standalone HTML (offline-ready)');
+  console.log('  POST /api/audit → GitHub repo audit report');
+  console.log('  GET  /audit → Repo Auditor UI');
   console.log('');
   if (!director) console.warn('⚠ Director agent NOT loaded — LLM calls will fail.');
   else console.log('✓ Director agent ready');

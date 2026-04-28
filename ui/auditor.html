@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes Repo Auditor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #080b14;
+    --surface: rgba(255,255,255,0.04);
+    --surface2: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --muted: #8892a4;
+    --accent: #7c5cfc;
+    --green: #4ade80;
+  }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .bg {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(124,92,252,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(92,225,230,0.08) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(252,92,125,0.05) 0%, transparent 50%),
+      var(--bg);
+  }
+  .card {
+    max-width: 600px;
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    backdrop-filter: blur(12px);
+  }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 99px;
+    background: rgba(124,92,252,0.15);
+    border: 1px solid rgba(124,92,252,0.3);
+    font-size: 0.72rem;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+  }
+  h1 span { color: var(--accent); }
+  p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+  .input-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  input {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,92,252,0.1);
+  }
+  input::placeholder { color: rgba(255,255,255,0.2); }
+  button {
+    padding: 12px 24px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  button:hover { background: #6a4be0; transform: translateY(-1px); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .examples {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .example {
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: monospace;
+  }
+  .example:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  #status {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 12px;
+    min-height: 24px;
+  }
+  #status .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #result {
+    margin-top: 16px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: none;
+  }
+  #result iframe {
+    width: 100%;
+    height: 600px;
+    border: none;
+    border-radius: 8px;
+  }
+  .footer {
+    margin-top: 32px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<div class="card">
+  <div class="badge">🤖 Hermes Repo Auditor</div>
+  <h1>Audit any <span>GitHub</span> repo</h1>
+  <p>Enter a repository URL. Hermes reads the codebase, analyzes architecture, checks code quality and security, and generates a structured audit report.</p>
+
+  <div class="examples">
+    <span class="example" onclick="document.getElementById('repo-input').value='expressjs/express'">expressjs/express</span>
+    <span class="example" onclick="document.getElementById('repo-input').value='vercel/next.js'">vercel/next.js</span>
+    <span class="example" onclick="document.getElementById('repo-input').value='rust-lang/rust'">rust-lang/rust</span>
+    <span class="example" onclick="document.getElementById('repo-input').value='home-assistant/core'">home-assistant/core</span>
+  </div>
+
+  <div class="input-group">
+    <input id="repo-input" type="text" placeholder="user/repo or full GitHub URL" autofocus>
+    <button id="audit-btn" onclick="runAudit()">Audit →</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="result"></div>
+</div>
+
+<div class="footer">
+  Built by <a href="https://github.com/coe0718/hermes" target="_blank">Hermes Agent</a> · Hermes Creative Hackathon 2026
+</div>
+
+<script>
+async function runAudit() {
+  const input = document.getElementById('repo-input');
+  const btn = document.getElementById('audit-btn');
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+
+  const repo = input.value.trim();
+  if (!repo) {
+    status.textContent = '⚠️ Enter a GitHub repo URL';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Auditing...';
+  status.innerHTML = '<span class="spinner"></span> Fetching repo...';
+
+  try {
+    const resp = await fetch('/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo, maxFiles: 20 }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text().catch(() => 'Unknown error');
+      throw new Error(err.slice(0, 200));
+    }
+
+    const html = await resp.text();
+    result.style.display = 'block';
+    result.innerHTML = `<iframe srcdoc="${escHtml(html)}"></iframe>`;
+    status.innerHTML = '✅ Audit complete. Scroll to view report.';
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Audit →';
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Enter key triggers audit
+document.getElementById('repo-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runAudit();
+});
+</script>
+</body>
+</html>
