@@ -22,6 +22,7 @@
  */
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
@@ -141,6 +142,119 @@ try {
   console.warn('Enhanced ASCII template not available:', e.message);
 }
 
+// ─── CDN asset fetcher for standalone export ────────────────────────────────
+
+const CDN_CACHE = {};
+
+function fetchCdnAsset(url) {
+  return new Promise((resolve, reject) => {
+    if (CDN_CACHE[url]) return resolve(CDN_CACHE[url]);
+
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // Follow redirect
+        return fetchCdnAsset(res.headers.location).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`CDN fetch ${url}: HTTP ${res.statusCode}`));
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const content = Buffer.concat(chunks).toString('utf-8');
+        CDN_CACHE[url] = content;
+        resolve(content);
+      });
+    }).on('error', reject);
+  });
+}
+
+// ─── Standalone Export ──────────────────────────────────────────────────────
+
+async function handleExport(req, res) {
+  const body = await readBody(req);
+  const spec = body.spec || body;
+  const generator = body.generator || 'p5js-enhanced';
+
+  if (!spec || !spec.scene) {
+    return jsonResponse(res, 400, { error: 'Missing or invalid scene spec' });
+  }
+
+  try {
+    // Generate the HTML using the appropriate generator
+    let html;
+    switch (generator) {
+      case 'p5js-enhanced':
+        if (!enhancedTemplate) throw new Error('Enhanced p5.js template not loaded');
+        html = enhancedTemplate.replace(
+          '<body>',
+          '<body data-spec="' + JSON.stringify(spec).replace(/"/g, '&quot;') + '">'
+        );
+        break;
+      case 'ascii-enhanced':
+        if (!asciiEnhancedTemplate) throw new Error('Enhanced ASCII template not loaded');
+        html = asciiEnhancedTemplate.replace(
+          '<body data-spec="{}">',
+          '<body data-spec="' + JSON.stringify(spec).replace(/"/g, '&quot;') + '">'
+        );
+        break;
+      case 'procedural-audio':
+        if (!proceduralAudio) throw new Error('Procedural audio generator not loaded');
+        html = proceduralAudio.generate(spec);
+        break;
+      case 'stitch':
+        if (!stitcher) throw new Error('Stitcher not loaded');
+        html = stitcher.buildHTML(spec, null, body.audioData || null);
+        break;
+      default:
+        return jsonResponse(res, 400, { error: 'Unknown generator: ' + generator });
+    }
+
+    // Find and fetch all CDN script tags, inline them
+    const cdnUrls = [];
+    const cdnRegex = /<script\s+src="(https?:\/\/[^"]+)"[^>]*><\/script>/g;
+    let match;
+    while ((match = cdnRegex.exec(html)) !== null) {
+      cdnUrls.push(match[1]);
+    }
+
+    if (cdnUrls.length > 0) {
+      const results = await Promise.allSettled(cdnUrls.map(fetchCdnAsset));
+      for (let i = 0; i < cdnUrls.length; i++) {
+        const url = cdnUrls[i];
+        const result = results[i];
+        if (result.status === 'fulfilled') {
+          // Replace CDN script tag with inlined script
+          html = html.replace(
+            '<script src="' + url + '"></script>',
+            '<script>' + result.value + '</script>'
+          );
+        } else {
+          console.warn('Failed to fetch CDN asset, keeping remote:', url, result.reason.message);
+        }
+      }
+    }
+
+    // Add export metadata badge
+    const sceneName = (spec.scene && spec.scene.name) || 'scene';
+    const exportBadge = `<!--\n  ═══ Prompt-to-Scene · Standalone Export ═══\n  Scene: ${sceneName}\n  Generator: ${generator}\n  Generated: ${new Date().toISOString()}\n  Built by Hermes Agent (hermes-agent.vercel.app)\n  → https://github.com/coe0718/hackathon-creative\n  ═══════════════════════════════════════════════\n-->\n`;
+    html = exportBadge + html;
+
+    // Return as downloadable file
+    const filename = sceneName.replace(/[^a-z0-9-]/gi, '-').toLowerCase() + '-' + generator + '.html';
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="' + filename + '"',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(html);
+  } catch(e) {
+    console.error('Export error:', e.message);
+    jsonResponse(res, 500, { error: 'Export failed: ' + e.message });
+  }
+}
+
 // ─── MIME types ────────────────────────────────────────────────────────────
 
 const MIME = {
@@ -229,6 +343,9 @@ if (url.pathname === '/api/batch' && method === 'POST') {
 }
 if (url.pathname === '/api/generate-from-image' && method === 'POST') {
   return handleGenerateFromImage(req, res);
+}
+if (url.pathname === '/api/export' && method === 'POST') {
+  return handleExport(req, res);
 }
 
 // ── Landing page ───────────────────────────────────────────────────────────
@@ -542,7 +659,8 @@ server.listen(PORT, () => {
   console.log('  POST /api/generate/ascii-enhanced → ASCII HTML (4-layer)');
   console.log('  POST /api/generate/procedural-audio → Procedural Audio HTML');
  console.log(' POST /api/generate/stitch → Stitcher HTML');
-  console.log(' POST /api/generate-from-image → Image → Scene spec (VLM + Director)');
+  console.log('  POST /api/generate-from-image → Image → Scene spec (VLM + Director)');
+  console.log('  POST /api/export → Download standalone HTML (offline-ready)');
   console.log('');
   if (!director) console.warn('⚠ Director agent NOT loaded — LLM calls will fail.');
   else console.log('✓ Director agent ready');

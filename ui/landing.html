@@ -144,11 +144,39 @@
     background: var(--surface);
     box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
     aspect-ratio: 16/9;
+    position: relative;
   }
   .demo-embed iframe {
     width: 100%;
     height: 100%;
     border: none;
+  }
+  .demo-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    padding: 4px 12px;
+    border-radius: 99px;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(8px);
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.1);
+    pointer-events: none;
+    z-index: 10;
+  }
+  .demo-badge .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4ade80;
+    margin-right: 6px;
+    animation: pulseDot 1.5s ease-in-out infinite;
+  }
+  @keyframes pulseDot {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
   }
 
   /* Features */
@@ -321,6 +349,7 @@
 <!-- Demo -->
 <section class="demo-section container" id="try">
 <div class="demo-embed">
+  <div class="demo-badge"><span class="live-dot"></span> Auto-play demo</div>
   <iframe src="/ui/index.html?demo=1" title="Prompt-to-Scene Demo" loading="lazy"></iframe>
  </div>
 </section>
@@ -357,8 +386,8 @@
     </div>
     <div class="feature-card">
       <div class="feature-icon" style="background:rgba(180,92,255,0.12)">📦</div>
-      <h3>Docker-Ready</h3>
-      <p>Self-contained Docker image. Deploy to Railway, Render, Fly.io, or anywhere — one command.</p>
+      <h3>Standalone Export</h3>
+      <p>Export any scene as a single self-contained HTML file with all dependencies inlined. Open it anywhere — no server, no internet.</p>
     </div>
   </div>
 </section>

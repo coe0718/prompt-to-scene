@@ -491,12 +491,21 @@ ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleImag
     <h3 style="margin-top:12px;">Download</h3>
     <button class="btn green full" onclick="downloadActive()">⬇ Download Active Panel</button>
     <button class="btn full" onclick="downloadAll()">⬇ Download All Outputs</button>
+    <button class="btn full" onclick="exportStandalone('p5js-enhanced')" style="color:var(--cyan);">📦 Export Standalone HTML (Offline)</button>
+    <button class="btn full" onclick="recordDemo()" style="color:var(--pink);">⏺ Record Demo Video (10s WebM)</button>
     <button class="btn full" onclick="shareURL()">🔗 Copy Share URL</button>
     <button class="btn full" onclick="toggleSideBySide()">⊞ Side-by-Side 4-Up</button>
     <button class="btn full" onclick="copyEmbedCode()" style="color:var(--green);">📋 Copy Embed Code</button>
 
     <h3 style="margin-top:12px;">History <button onclick="clearHistory()" style="float:right;font-size:9px;background:none;border:1px solid var(--glass-border);color:var(--dim);padding:1px 6px;border-radius:4px;cursor:pointer;">Clear</button></h3>
     <div id="gallery-list" style="max-height:250px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+
+    <h3 style="margin-top:12px;">Keyboard Shortcuts</h3>
+    <div style="font-size:10px;color:var(--dim);line-height:1.8;">
+      <kbd style="background:var(--surface);padding:1px 5px;border-radius:3px;font-family:inherit;">Space</kbd> = Surprise Me ·
+      <kbd style="background:var(--surface);padding:1px 5px;border-radius:3px;font-family:inherit;">1</kbd>-<kbd style="background:var(--surface);padding:1px 5px;border-radius:3px;font-family:inherit;">4</kbd> = Generators
+      · <kbd style="background:var(--surface);padding:1px 5px;border-radius:3px;font-family:inherit;">S</kbd> = Share<br>
+    </div>
 
     <h3 style="margin-top:12px;">Visual Style</h3>
     <div class="btn-row" id="style-btns">
@@ -1936,6 +1945,46 @@ function downloadAll() {
   }
 }
 
+window.exportStandalone = async function(generator) {
+  const spec = getCurrentSpec ? getCurrentSpec() : null;
+  if (!spec) {
+    alert('Generate a scene first, then export.');
+    return;
+  }
+
+  const btn = event?.target || document.querySelector('[onclick*="exportStandalone"]');
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = '⏳ Inlining assets...';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 5000);
+  }
+
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spec, generator }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const name = (spec.scene?.name || 'scene').replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    a.download = name + '-' + generator + '-standalone.html';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch(e) {
+    alert('Export failed: ' + e.message);
+  } finally {
+    if (btn) { btn.textContent = '📦 Export Standalone HTML (Offline)'; btn.disabled = false; }
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // STARTUP
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2009,13 +2058,41 @@ async function autoDemo() {
   // Show a brief splash so the judge sees something happening
   const splash = document.createElement('div');
   splash.id = 'demo-splash';
-  splash.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(6,6,10,0.95);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity 0.8s;';
-  splash.innerHTML = '<div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#c084fc,#60a5fa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Prompt-to-Scene</div><div style="color:#e0e0f0;font-size:14px;">Generating your scene...</div><div id="demo-step" style="color:rgba(255,255,255,0.35);font-size:11px;">Loading preset...</div>';
+  splash.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(6,6,10,0.96);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;transition:opacity 0.8s;';
+
+  const steps = [
+    { id: 'step-select', done: false, text: 'Selecting scene...', icon: '🎨' },
+    { id: 'step-p5js', done: false, text: 'Rendering p5.js visual...', icon: '✨' },
+    { id: 'step-audio', done: false, text: 'Generating procedural audio...', icon: '🔊' },
+    { id: 'step-stitch', done: false, text: 'Stitching final scene...', icon: '🎬' },
+    { id: 'step-done', done: false, text: 'Done!', icon: '✅' },
+  ];
+
+  splash.innerHTML = `
+    <div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#c084fc,#60a5fa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Prompt-to-Scene</div>
+    <div id="demo-steps" style="font-size:13px;display:flex;flex-direction:column;gap:8px;margin-top:8px;min-width:240px;">
+      ${steps.map(s => `<div id="${s.id}" style="display:flex;align-items:center;gap:10px;color:rgba(255,255,255,0.3);transition:all 0.3s;">
+        <span style="width:20px;text-align:center;">⬜</span>
+        <span>${s.icon} ${s.text}</span>
+      </div>`).join('')}
+    </div>
+    <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:8px;">Powered by Hermes Agent</div>
+  `;
   document.body.appendChild(splash);
 
-  function updateStep(text) {
-    const el = document.getElementById('demo-step');
-    if (el) el.textContent = text;
+  function markStep(idx, text) {
+    const el = document.getElementById(steps[idx].id);
+    if (!el) return;
+    el.style.color = 'rgba(255,255,255,0.9)';
+    const icon = el.querySelector('span:first-child');
+    if (icon) icon.textContent = '✅';
+    const label = el.querySelector('span:last-child');
+    if (label && text) label.textContent = text;
+  }
+
+  function markActive(idx) {
+    const el = document.getElementById(steps[idx].id);
+    if (el) el.style.color = 'rgba(255,255,255,0.6)';
   }
 
   function hideSplash() {
@@ -2025,28 +2102,32 @@ async function autoDemo() {
 
   try {
     // Step 1: Get a random scene (preset — no API key needed)
-    updateStep('🎨 Selecting scene...');
+    markActive(0);
     await surpriseMe();
     const spec = getCurrentSpec();
+    markStep(0, (spec.scene?.name || 'scene') + ' selected');
 
     // Step 2: Generate p5.js visual
-    updateStep('✨ Rendering p5.js visual...');
-    await new Promise(r => setTimeout(r, 600));
+    markActive(1);
+    await new Promise(r => setTimeout(r, 400));
     generateOutput('p5js');
     await new Promise(r => setTimeout(r, 1500));
+    markStep(1, 'p5.js visual ready');
 
     // Step 3: Generate procedural audio
-    updateStep('🔊 Generating procedural audio...');
+    markActive(2);
     generateOutput('procedural-audio');
     await new Promise(r => setTimeout(r, 1200));
+    markStep(2, 'Audio generated');
 
     // Step 4: Stitch them together
-    updateStep('🎬 Stitching final scene...');
+    markActive(3);
     generateOutput('stitcher');
     await new Promise(r => setTimeout(r, 800));
+    markStep(3, 'Scene stitched');
 
     // Step 5: Switch to final tab and reveal
-    updateStep('✅ Done!');
+    markStep(4, 'Ready!');
     await new Promise(r => setTimeout(r, 400));
     switchTab('final');
     hideSplash();
