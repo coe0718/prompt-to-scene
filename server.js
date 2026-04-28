@@ -685,6 +685,15 @@ async function handleAudit(req, res) {
   }
 
   console.log(`Audit: Fetching ${repoUrl}...`);
+
+  // Set response timeout
+  res.setTimeout(180000, () => {
+    if (!res.writableEnded) {
+      res.writeHead(504, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Audit timed out after 3 minutes. Try a smaller repo or fewer files.' }));
+    }
+  });
+
   try {
     const repoData = await repoFetcher.fetchRepo(repoUrl, { maxFiles: body.maxFiles || 20 });
     console.log(`Audit: Analyzing ${repoData.metadata.full_name} (${repoData.files.length} files)...`);

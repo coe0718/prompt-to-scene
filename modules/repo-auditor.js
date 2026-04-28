@@ -46,7 +46,7 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
       model: config.model,
       messages,
       temperature,
-      max_tokens: 4096,
+      max_tokens: 2048,
     });
 
     const urlObj = new URL(config.url);
@@ -71,6 +71,10 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
           reject(new Error('Failed to parse LLM response'));
         }
       });
+    });
+    req.setTimeout(60000, () => {
+      req.destroy();
+      reject(new Error('LLM request timed out after 60s'));
     });
     req.on('error', reject);
     req.write(body);

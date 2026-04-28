@@ -596,11 +596,15 @@ async function runAudit() {
     setStep('p-structural', 'active');
     status.innerHTML = '<span class="spinner"></span> Analyzing architecture...';
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
     const resp = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo, maxFiles: 20 }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     setStep('p-structural', 'done');
     setStep('p-deep', 'active');
@@ -624,7 +628,8 @@ async function runAudit() {
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
   } catch(e) {
-    status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(e.message) + '</span>';
+    const msg = e.name === 'AbortError' ? 'Request timed out after 3 minutes. The LLM may be slow or unreachable.' : e.message;
+    status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>';
     progress.style.display = 'none';
   } finally {
     btn.disabled = false;
