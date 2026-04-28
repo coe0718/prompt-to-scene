@@ -592,7 +592,7 @@ async function runAudit() {
 
   setStep('p-fetch', 'active');
 
-  // Elapsed timer for the waiting period
+  // Elapsed timer
   let elapsed = 0;
   const timerEl = document.createElement('span');
   timerEl.style.cssText = 'color:var(--muted);font-size:0.75rem;margin-left:8px;';
@@ -601,14 +601,29 @@ async function runAudit() {
     timerEl.textContent = '(' + elapsed + 's)';
   }, 1000);
 
+  // SSE stream reader
+  function updateStatus(step, msg) {
+    const stepMap = { fetch: 'p-fetch', structural: 'p-structural', deep: 'p-deep', aggregation: 'p-deep', report: 'p-report' };
+    const stepId = stepMap[step];
+    if (stepId) {
+      setStep('p-fetch', 'done');
+      setStep('p-structural', step === 'structural' ? 'active' : 'done');
+      setStep('p-deep', step === 'deep' || step === 'aggregation' ? 'active' : (step !== 'structural' ? 'done' : ''));
+      setStep('p-report', step === 'report' ? 'active' : '');
+    }
+    status.innerHTML = '<span class="spinner"></span> ' + escHtml(msg);
+    status.appendChild(timerEl);
+  }
+
   try {
     setStep('p-fetch', 'done');
     setStep('p-structural', 'active');
-    status.innerHTML = '<span class="spinner"></span> Kimi K2.5 is thinking...';
+    status.innerHTML = '<span class="spinner"></span> Starting audit...';
     status.appendChild(timerEl);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+    const timeoutId = setTimeout(() => controller.abort(), 240000);
+
     const resp = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -617,33 +632,72 @@ async function runAudit() {
     });
     clearTimeout(timeoutId);
 
-    setStep('p-structural', 'done');
-    setStep('p-deep', 'active');
-    status.innerHTML = '<span class="spinner"></span> Deep code analysis...';
-    status.appendChild(timerEl);
-
     if (!resp.ok) {
       const err = await resp.text().catch(() => 'Unknown error');
       throw new Error(err.slice(0, 200));
     }
 
-    setStep('p-deep', 'done');
-    setStep('p-report', 'active');
-    status.innerHTML = '<span class="spinner"></span> Generating report...';
-    status.appendChild(timerEl);
+    // Read SSE stream
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let reportHtml = null;
 
-    const html = await resp.text();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse complete SSE events
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        if (!part.trim()) continue;
+        const lines = part.split('\n');
+        let eventType = 'message';
+        let dataStr = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          else if (line.startsWith('data: ')) dataStr += line.slice(6);
+        }
+        if (!dataStr) continue;
+
+        try {
+          const data = JSON.parse(dataStr);
+          switch (eventType) {
+            case 'progress':
+              updateStatus(data.step, data.message);
+              break;
+            case 'complete':
+              reportHtml = data.html;
+              break;
+            case 'error':
+              throw new Error(data.message || 'Audit failed');
+          }
+        } catch(e) {
+          if (e.message !== 'Audit failed') {
+            console.warn('SSE parse error:', e.message);
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
+
+    if (!reportHtml) throw new Error('No report received from server');
 
     setStep('p-report', 'done');
     result.style.display = 'block';
-    result.innerHTML = '<iframe srcdoc="' + escHtml(html) + '" title="Audit Report"></iframe>';
+    result.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report"></iframe>';
     clearInterval(timerInterval);
     status.innerHTML = '<span style="color:var(--green);">Audit complete. Report loaded above.</span>';
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
   } catch(e) {
     clearInterval(timerInterval);
-    const msg = e.name === 'AbortError' ? 'Request timed out after 3 minutes. The LLM may be slow or unreachable.' : e.message;
+    const msg = e.name === 'AbortError' ? 'Request timed out. The LLM may be slow or unreachable.' : e.message;
     status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>';
     progress.style.display = 'none';
   } finally {

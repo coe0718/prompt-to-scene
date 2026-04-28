@@ -684,36 +684,54 @@ async function handleAudit(req, res) {
     return jsonResponse(res, 500, { error: 'Auditor modules not loaded' });
   }
 
-  console.log(`Audit: Fetching ${repoUrl}...`);
+  // ─── SSE Streaming Setup ────────────────────────────────────────────────
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
 
-  // Set response timeout
-  res.setTimeout(180000, () => {
+  let timedOut = false;
+  res.setTimeout(240000, () => {
+    timedOut = true;
     if (!res.writableEnded) {
-      res.writeHead(504, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Audit timed out after 3 minutes. Try a smaller repo or fewer files.' }));
+      res.write(`event: error\ndata: ${JSON.stringify({ message: 'Audit timed out. Try a smaller repo.' })}\n\n`);
+      res.end();
     }
   });
 
+  const send = (event, data) => {
+    if (!res.writableEnded && !timedOut) {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+  };
+
   try {
-    const repoData = await repoFetcher.fetchRepo(repoUrl, { maxFiles: body.maxFiles || 20 });
+    send('progress', { step: 'fetch', message: 'Fetching repo from GitHub...' });
+    console.log(`Audit: Fetching ${repoUrl}...`);
+    const repoData = await repoFetcher.fetchRepo(repoUrl, { maxFiles: body.maxFiles || 10 });
     console.log(`Audit: Analyzing ${repoData.metadata.full_name} (${repoData.files.length} files)...`);
 
-    const result = await repoAuditor.analyzeRepo(repoData);
+    send('progress', { step: 'structural', message: `Kimi analyzing ${repoData.metadata.full_name}...` });
+    const result = await repoAuditor.analyzeRepo(repoData, (phase, msg) => {
+      send('progress', { step: phase, message: msg });
+    });
 
-    // Generate HTML report
+    send('progress', { step: 'report', message: 'Generating report...' });
     const htmlReport = reportGen.generateReport(result, repoUrl);
 
     // Cache audit result for PR generation
     auditCache.set(repoUrl, { result, repoUrl, timestamp: Date.now() });
 
-    res.writeHead(200, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(htmlReport);
+    send('complete', { html: htmlReport });
+    res.end();
   } catch(e) {
     console.error(`Audit error for ${repoUrl}:`, e.message);
-    jsonResponse(res, 500, { error: 'Audit failed: ' + e.message.slice(0, 200) });
+    if (!res.writableEnded) {
+      send('error', { message: e.message.slice(0, 300) });
+      res.end();
+    }
   }
 }
 

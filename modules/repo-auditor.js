@@ -226,7 +226,7 @@ function chunkFiles(files, maxChunkSize = 6000) {
   return chunks;
 }
 
-async function analyzeRepo(repoData) {
+async function analyzeRepo(repoData, onProgress) {
   const startTime = Date.now();
   // Prefer NVIDIA (confirmed working), fall back to OpenRouter
   const model = process.env.NVIDIA_API_KEY ? 'kimi' : (process.env.OPENROUTER_API_KEY ? 'minimax' : null);
@@ -235,6 +235,7 @@ async function analyzeRepo(repoData) {
 
   // ─── Pass 1: Structural Analysis ──────────────────────────────────────
   console.log('Auditor: Pass 1 — Structural analysis...');
+  onProgress && onProgress('structural', 'Kimi is analyzing the project structure...');
   const structuralContext = [
     `# Repository: ${repoData.metadata.full_name}`,
     `Description: ${repoData.metadata.description || 'N/A'}`,
@@ -277,6 +278,7 @@ async function analyzeRepo(repoData) {
 
   for (let i = 0; i < chunks.length; i++) {
     console.log(`Auditor:   Deep chunk ${i + 1}/${chunks.length} (${chunks[i].length} files)...`);
+    onProgress && onProgress('deep', `Kimi reviewing files (chunk ${i+1}/${chunks.length})...`);
     const chunkContent = chunks[i].join('\n\n');
     try {
       const raw = await callLLM([
@@ -292,6 +294,7 @@ async function analyzeRepo(repoData) {
 
   // ─── Aggregation ──────────────────────────────────────────────────────
   console.log('Auditor: Pass 3 — Aggregation...');
+  onProgress && onProgress('aggregation', 'Kimi is aggregating findings...');
 
   // Collect all findings
   const allFindings = [];
