@@ -18,29 +18,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
-    networks:
-      - hermes-net
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: hermes-review-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - app
-    networks:
-      - hermes-net
-
-networks:
-  hermes-net:
-    driver: bridge
-
-volumes:
-  caddy_data:
-  caddy_config:
