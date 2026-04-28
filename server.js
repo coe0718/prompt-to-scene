@@ -364,6 +364,9 @@ if (url.pathname === '/api/audit' && method === 'POST') {
 if (url.pathname === '/landing' || url.pathname === '/about') {
   return serveFile(res, path.join(ROOT, 'ui', 'landing.html'));
 }
+if (url.pathname === '/creative') {
+  return serveFile(res, path.join(ROOT, 'ui', 'index.html'));
+}
 
 // ── Repo Auditor page ──────────────────────────────────────────────────
 if (url.pathname === '/audit') {
@@ -372,7 +375,7 @@ if (url.pathname === '/audit') {
 
  // ── Static files ──
  if (url.pathname === '/' || url.pathname === '/index.html') {
-  return serveFile(res, path.join(ROOT, 'ui', 'index.html'));
+  return serveFile(res, path.join(ROOT, 'ui', 'auditor.html'));
  }
   // ui/ prefix
   if (url.pathname.startsWith('/ui/')) {
