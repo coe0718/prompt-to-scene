@@ -60,6 +60,9 @@ process.on('unhandledRejection', (reason) => {
 const PORT = parseInt(process.env.PORT || process.argv[3] || '7041', 10);
 const ROOT = __dirname;
 
+// ─── Audit result cache (for PR generation) ──────────────────────────────────
+const auditCache = new Map();
+
 // ─── Require project modules ───────────────────────────────────────────────
 
 let director, p5jsGen, asciiGen, stitcher, vision, repoFetcher, repoAuditor, reportGen;
@@ -358,6 +361,12 @@ if (url.pathname === '/api/export' && method === 'POST') {
 }
 if (url.pathname === '/api/audit' && method === 'POST') {
   return handleAudit(req, res);
+}
+if (url.pathname === '/api/audit/pr' && method === 'POST') {
+  return handleAuditPR(req, res);
+}
+if (url.pathname === '/api/audit/pr/publish' && method === 'POST') {
+  return handleAuditPRPublish(req, res);
 }
 
 // ── Landing page ───────────────────────────────────────────────────────────
@@ -682,14 +691,11 @@ async function handleAudit(req, res) {
 
     const result = await repoAuditor.analyzeRepo(repoData);
 
-    // Generate PR fix plan if requested
-    let prPlan = null;
-    if (body.generate_pr) {
-      prPlan = await repoAuditor.generateFixPR(result, repoUrl);
-    }
-
     // Generate HTML report
     const htmlReport = reportGen.generateReport(result, repoUrl);
+
+    // Cache audit result for PR generation
+    auditCache.set(repoUrl, { result, repoUrl, timestamp: Date.now() });
 
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
@@ -699,6 +705,77 @@ async function handleAudit(req, res) {
   } catch(e) {
     console.error(`Audit error for ${repoUrl}:`, e.message);
     jsonResponse(res, 500, { error: 'Audit failed: ' + e.message.slice(0, 200) });
+  }
+}
+
+// ─── PR Plan Generation Handler ──────────────────────────────────────────────
+
+async function handleAuditPR(req, res) {
+  const body = await readBody(req);
+  const repoUrl = body.repo || body.url;
+
+  if (!repoUrl) {
+    return jsonResponse(res, 400, { error: 'Send { repo: \"user/repo\" }' });
+  }
+
+  // Look up cached audit result
+  const cached = auditCache.get(repoUrl);
+  if (!cached || !cached.result) {
+    return jsonResponse(res, 400, {
+      error: 'No cached audit for this repo. Run the audit first.',
+      hint: 'POST /api/audit with { repo: "user/repo" } first',
+    });
+  }
+
+  console.log(`PR Plan: Generating for ${repoUrl}...`);
+  try {
+    const planResult = await repoAuditor.generateFixPR(cached.result, repoUrl);
+
+    // Cache the PR plan too
+    auditCache.set(repoUrl, { ...cached, prPlan: planResult.pr, planTimestamp: Date.now() });
+
+    jsonResponse(res, 200, planResult);
+  } catch(e) {
+    console.error(`PR Plan error for ${repoUrl}:`, e.message);
+    jsonResponse(res, 500, { error: 'PR generation failed: ' + e.message.slice(0, 200) });
+  }
+}
+
+// ─── PR Publish Handler ──────────────────────────────────────────────────────
+
+async function handleAuditPRPublish(req, res) {
+  const body = await readBody(req);
+  const repoUrl = body.repo || body.url;
+
+  if (!repoUrl) {
+    return jsonResponse(res, 400, { error: 'Send { repo: \"user/repo\" }' });
+  }
+
+  // Use cached PR plan, or accept one in the request body
+  const cached = auditCache.get(repoUrl);
+  const prPlan = body.pr_plan || cached?.prPlan;
+
+  if (!prPlan) {
+    return jsonResponse(res, 400, {
+      error: 'No PR plan found. Generate one first via POST /api/audit/pr',
+    });
+  }
+
+  if (!process.env.GITHUB_TOKEN) {
+    return jsonResponse(res, 400, {
+      error: 'GITHUB_TOKEN not configured. Set GITHUB_TOKEN in .env to publish PRs.',
+      note: 'PR plan was generated but cannot be published without a GitHub token.',
+      prPlan, // Return the plan so the user can still see it
+    });
+  }
+
+  console.log(`PR Publish: Publishing PR for ${repoUrl}...`);
+  try {
+    const result = await repoAuditor.publishPR(prPlan, repoUrl);
+    jsonResponse(res, 200, result);
+  } catch(e) {
+    console.error(`PR Publish error for ${repoUrl}:`, e.message);
+    jsonResponse(res, 500, { error: 'PR publish failed: ' + e.message.slice(0, 300) });
   }
 }
 

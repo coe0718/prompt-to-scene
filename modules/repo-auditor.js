@@ -402,7 +402,7 @@ function extractJSON(text) {
   return jsonStr.substring(0, endIndex);
 }
 
-// ─── PR Generation (stretch — generates fix PRs) ──────────────────────────
+// ─── PR Generation ──────────────────────────────────────────────────────────
 
 const PR_GENERATION_PROMPT = `You are an automated PR generator. Based on the audit findings below, generate a pull request that addresses the most critical issues.
 
@@ -423,10 +423,6 @@ Output ONLY valid JSON. No markdown, no explanation.
 }`;
 
 async function generateFixPR(auditResult, repoUrl) {
-  if (!process.env.GITHUB_TOKEN) {
-    return { error: 'GITHUB_TOKEN required for PR generation', pr: null };
-  }
-
   const findings = auditResult.findings || [];
   const criticalIssues = findings.filter(f => f.severity === 'CRITICAL');
   const warnings = findings.filter(f => f.severity === 'WARNING');
@@ -462,4 +458,174 @@ async function generateFixPR(auditResult, repoUrl) {
   }
 }
 
-module.exports = { analyzeRepo, generateFixPR, extractJSON };
+// ─── GitHub API Helpers ─────────────────────────────────────────────────────
+
+function githubUrl(path) {
+  return `https://api.github.com${path}`;
+}
+
+function githubRequest(path, method = 'GET', body = null) {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return Promise.reject(new Error('GITHUB_TOKEN not set'));
+
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(githubUrl(path));
+    const options = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
+      method,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Hermes-Repo-Auditor/1.0',
+      },
+    };
+
+    let bodyStr = null;
+    if (body) {
+      bodyStr = JSON.stringify(body);
+      options.headers['Content-Type'] = 'application/json';
+      options.headers['Content-Length'] = Buffer.byteLength(bodyStr);
+    }
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        if (res.statusCode >= 400) {
+          let msg = `GitHub API ${res.statusCode}`;
+          try { const e = JSON.parse(data); msg += ': ' + (e.message || data.slice(0, 200)); }
+          catch(e2) { msg += ': ' + data.slice(0, 200); }
+          return reject(new Error(msg));
+        }
+        if (res.statusCode === 204) return resolve(null); // No content (delete)
+        try { resolve(JSON.parse(data)); }
+        catch(e) { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
+
+/**
+ * Parse owner/repo from various URL formats:
+ *   https://github.com/owner/repo
+ *   git@github.com:owner/repo.git
+ *   owner/repo
+ */
+function parseRepoUrl(url) {
+  const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/) ||
+                url.match(/^([^/]+)\/([^/]+)$/);
+  if (!match) throw new Error('Invalid repo URL: ' + url);
+  return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
+}
+
+/**
+ * Publish a PR plan to GitHub:
+ *   1. Check write access — fork if needed
+ *   2. Create branch from default branch
+ *   3. Commit file changes via Contents API
+ *   4. Open pull request
+ */
+async function publishPR(prPlan, repoUrl) {
+  const { owner, repo } = parseRepoUrl(repoUrl);
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return { error: 'GITHUB_TOKEN not set', url: null };
+
+  // Resolve actual owner/repo (may fork if no write access)
+  let targetOwner = owner;
+  let targetRepo = repo;
+
+  // Step 1: Check if we can write directly
+  try {
+    await githubRequest(`/repos/${owner}/${repo}/branches`);
+  } catch(e) {
+    // No write access — fork the repo
+    console.log(`PR: Forking ${owner}/${repo}...`);
+    const fork = await githubRequest(`/repos/${owner}/${repo}/forks`, 'POST');
+    targetOwner = fork.owner.login;
+    targetRepo = fork.name;
+    // Wait for fork to be ready
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  // Step 2: Get default branch and its SHA
+  const repoInfo = await githubRequest(`/repos/${targetOwner}/${targetRepo}`);
+  const defaultBranch = repoInfo.default_branch;
+  const refResponse = await githubRequest(`/repos/${targetOwner}/${targetRepo}/git/refs/heads/${defaultBranch}`);
+  const baseSha = refResponse.object.sha;
+
+  // Step 3: Create feature branch
+  const branchName = prPlan.branch_name || `fix/hermes-audit-${Date.now()}`;
+  console.log(`PR: Creating branch ${branchName} at ${baseSha.slice(0, 7)}...`);
+  await githubRequest(`/repos/${targetOwner}/${targetRepo}/git/refs`, 'POST', {
+    ref: `refs/heads/${branchName}`,
+    sha: baseSha,
+  });
+
+  // Step 4: Commit file changes
+  const files = prPlan.files || [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    console.log(`PR: ${file.change_type === 'delete' ? 'Deleting' : 'Updating'} ${file.path}...`);
+
+    if (file.change_type === 'delete') {
+      try {
+        const fileInfo = await githubRequest(
+          `/repos/${targetOwner}/${targetRepo}/contents/${file.path}?ref=${branchName}`
+        );
+        await githubRequest(
+          `/repos/${targetOwner}/${targetRepo}/contents/${file.path}`, 'DELETE', {
+          message: file.description || `Delete ${file.path}`,
+          sha: fileInfo.sha,
+          branch: branchName,
+        });
+      } catch(e) {
+        console.warn(`PR: Could not delete ${file.path}: ${e.message}`);
+      }
+    } else {
+      // Create or modify
+      const content = Buffer.from(file.code_snippet || '').toString('base64');
+
+      let sha = null;
+      if (file.change_type === 'modify') {
+        try {
+          const existing = await githubRequest(
+            `/repos/${targetOwner}/${targetRepo}/contents/${file.path}?ref=${branchName}`
+          );
+          sha = existing.sha;
+        } catch(e) {
+          // File doesn't exist yet — create it
+        }
+      }
+
+      await githubRequest(
+        `/repos/${targetOwner}/${targetRepo}/contents/${file.path}`, 'PUT', {
+        message: file.description || `Update ${file.path}`,
+        content,
+        sha: sha || undefined,
+        branch: branchName,
+      });
+    }
+  }
+
+  // Step 5: Open the pull request
+  console.log(`PR: Opening PR "${prPlan.pr_title}"...`);
+  const pr = await githubRequest(`/repos/${owner}/${repo}/pulls`, 'POST', {
+    title: prPlan.pr_title,
+    body: prPlan.pr_body,
+    head: targetOwner !== owner ? `${targetOwner}:${branchName}` : branchName,
+    base: defaultBranch,
+  });
+
+  return {
+    success: true,
+    url: pr.html_url,
+    number: pr.number,
+    message: `PR #${pr.number} opened: ${pr.html_url}`,
+  };
+}
+
+module.exports = { analyzeRepo, generateFixPR, publishPR, extractJSON };
