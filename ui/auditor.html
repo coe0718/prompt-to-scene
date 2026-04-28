@@ -250,6 +250,37 @@
     margin-right: 8px; vertical-align: middle;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .result-toolbar { display: flex; }
+  .sidebar-right {
+    position: sticky; top: 24px;
+    width: 280px; flex-shrink: 0;
+    display: none;
+  }
+  .history-card {
+    padding: 16px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .history-card h3 {
+    font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .history-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; font-size: 0.82rem;
+    border-bottom: 1px solid var(--border); cursor: pointer;
+    transition: color 0.2s;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item:hover { color: var(--accent); }
+  .history-item .h-repo { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+  .history-item .h-score { font-weight: 600; font-size: 0.82rem; }
+  .history-empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px 0; }
+  @media (min-width: 1100px) {
+    .audit-layout { display: flex; gap: 24px; align-items: flex-start; }
+    .audit-main { flex: 1; min-width: 0; }
+    .sidebar-right { display: block; }
+  }
   .spinner {
     display: inline-block; width: 14px; height: 14px;
     border-radius: 50%;
@@ -460,6 +491,8 @@
   <div class="section-label">Try It</div>
   <div class="section-title">Audit any public repo</div>
   <div class="audit-card">
+    <div class="audit-layout">
+    <div class="audit-main">
     <div class="examples">
       <span class="example" onclick="setRepo('expressjs/express')">expressjs/express</span>
       <span class="example" onclick="setRepo('prettier/prettier')">prettier/prettier</span>
@@ -479,6 +512,10 @@
     </div>
     <div id="status"></div>
     <div id="result"></div>
+    <div id="result-toolbar" style="display:none;margin-top:12px;gap:8px;flex-wrap:wrap;" class="result-toolbar">
+      <button class="btn btn-glass" onclick="downloadReport()" style="font-size:0.82rem;padding:8px 16px;">📄 Download HTML</button>
+      <button class="btn btn-glass" onclick="printReport()" style="font-size:0.82rem;padding:8px 16px;">🖨️ Print / Save as PDF</button>
+    </div>
 
     <!-- PR Generation Section -->
     <div id="pr-section" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
@@ -494,7 +531,21 @@
       </div>
       <div id="pr-plan" style="display:none;margin-top:16px;padding:16px;background:var(--surface2);border-radius:12px;"></div>
     </div>
+  </div> <!-- audit-main -->
+
+  <!-- Sidebar: Scan History -->
+  <div class="sidebar-right" id="sidebar-history">
+    <div class="history-card">
+      <h3>🕐 Recent Audits</h3>
+      <div id="history-list"><div class="history-empty">No audits yet — results appear here</div></div>
+    </div>
+    <div class="history-card">
+      <h3>🔗 Share</h3>
+      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;">Add <code style="color:var(--accent);">?repo=user/repo</code> to the URL to share with a pre-loaded repo.</div>
+      <button class="btn btn-glass" onclick="copyShareLink()" style="font-size:0.78rem;padding:6px 12px;width:100%;">📋 Copy Share Link</button>
+    </div>
   </div>
+  </div> <!-- audit-layout -->
 </section>
 
 <!-- Features -->
@@ -565,6 +616,26 @@
 </footer>
 
 <script>
+// ─── State ─────────────────────────────────────────────────────────────────
+let lastAuditedRepo = '';
+let lastReportHtml = '';
+
+// ─── URL param parsing: auto-run from ?repo= ──────────────────────────────
+(function initFromUrl() {
+  var params = new URLSearchParams(window.location.search);
+  var repoParam = params.get('repo');
+  if (repoParam) {
+    document.getElementById('repo-input').value = repoParam;
+    setTimeout(function() { runAudit(); }, 300);
+  }
+})();
+
+// ─── One-click sample audit ───────────────────────────────────────────────
+function auditExample(repo) {
+  document.getElementById('repo-input').value = repo;
+  runAudit();
+}
+
 function setRepo(repo) {
   document.getElementById('repo-input').value = repo;
 }
@@ -574,6 +645,7 @@ async function runAudit() {
   const btn = document.getElementById('audit-btn');
   const status = document.getElementById('status');
   const result = document.getElementById('result');
+  const toolbar = document.getElementById('result-toolbar');
   const progress = document.getElementById('progress');
 
   const repo = input.value.trim();
@@ -583,7 +655,9 @@ async function runAudit() {
   btn.textContent = '⏳ Auditing...';
   status.innerHTML = '';
   result.style.display = 'none';
+  toolbar.style.display = 'none';
   progress.style.display = 'flex';
+  lastReportHtml = '';
 
   function setStep(id, state) {
     const el = document.getElementById(id);
@@ -688,13 +762,21 @@ async function runAudit() {
 
     if (!reportHtml) throw new Error('No report received from server');
 
+    lastReportHtml = reportHtml;
+
+    // Update URL for sharing
+    var cleanRepo = repo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+    window.history.replaceState(null, '', '?repo=' + encodeURIComponent(cleanRepo));
+
     setStep('p-report', 'done');
     result.style.display = 'block';
     result.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report"></iframe>';
+    toolbar.style.display = 'flex';
     clearInterval(timerInterval);
     status.innerHTML = '<span style="color:var(--green);">Audit complete. Report loaded above.</span>';
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
+    refreshHistory();
   } catch(e) {
     clearInterval(timerInterval);
     const msg = e.name === 'AbortError' ? 'Request timed out. The LLM may be slow or unreachable.' : e.message;
@@ -710,8 +792,70 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// Track last audited repo
-let lastAuditedRepo = '';
+// ─── Download report as standalone HTML ────────────────────────────────────
+function downloadReport() {
+  if (!lastReportHtml) return;
+  var blob = new Blob([lastReportHtml], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = (lastAuditedRepo || 'audit').replace(/[^a-z0-9-_]/gi, '-') + '-report.html';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Print / Save as PDF ─────────────────────────────────────────────────
+function printReport() {
+  if (!lastReportHtml) return;
+  var w = window.open('', '', 'width=900,height=700');
+  w.document.write(lastReportHtml);
+  w.document.close();
+  w.focus();
+  setTimeout(function() { w.print(); }, 500);
+}
+
+// ─── Share link ───────────────────────────────────────────────────────────
+function copyShareLink() {
+  var repo = document.getElementById('repo-input').value.trim();
+  var clean = repo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  var url = window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(clean || '');
+  navigator.clipboard.writeText(url).then(function() {
+    var status = document.getElementById('status');
+    status.innerHTML = '<span style="color:var(--green);">Share link copied!</span>';
+    setTimeout(function() { status.innerHTML = ''; }, 2000);
+  }).catch(function() {
+    prompt('Copy this link:', url);
+  });
+}
+
+// ─── Scan history ─────────────────────────────────────────────────────────
+async function refreshHistory() {
+  try {
+    var resp = await fetch('/api/audit/history');
+    if (!resp.ok) return;
+    var history = await resp.json();
+    var list = document.getElementById('history-list');
+    if (!history || history.length === 0) {
+      list.innerHTML = '<div class="history-empty">No audits yet</div>';
+      return;
+    }
+    list.innerHTML = history.map(function(h) {
+      var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--red)';
+      var badge = h.critical > 0 ? ' <span style="color:var(--red);font-size:0.7rem;">' + h.critical + '</span>' : '';
+      return '<div class="history-item" onclick="setRepo(\'' + escHtml(h.repo) + '\');runAudit();">' +
+        '<div><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
+        '<div style="font-size:0.72rem;color:var(--muted);">' + (h.language || '') + badge + '</div></div>' +
+        '<div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
+        '</div>';
+    }).join('');
+    document.getElementById('sidebar-history').style.display = 'block';
+  } catch(e) {
+    // History widget fails silently
+  }
+}
+
+refreshHistory();
+setInterval(refreshHistory, 10000);
 
 async function generatePR() {
   const btn = document.getElementById('pr-btn');

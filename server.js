@@ -63,6 +63,9 @@ const ROOT = __dirname;
 // ─── Audit result cache (for PR generation) ──────────────────────────────────
 const auditCache = new Map();
 
+// ─── Scan history (for history widget) ──────────────────────────────────────
+const scanHistory = [];
+
 // ─── Require project modules ───────────────────────────────────────────────
 
 let director, p5jsGen, asciiGen, stitcher, vision, repoFetcher, repoAuditor, reportGen;
@@ -367,6 +370,9 @@ if (url.pathname === '/api/audit/pr' && method === 'POST') {
 }
 if (url.pathname === '/api/audit/pr/publish' && method === 'POST') {
   return handleAuditPRPublish(req, res);
+}
+if (url.pathname === '/api/audit/history' && method === 'GET') {
+  return jsonResponse(res, 200, scanHistory);
 }
 
 // ── Landing page ───────────────────────────────────────────────────────────
@@ -723,6 +729,19 @@ async function handleAudit(req, res) {
 
     // Cache audit result for PR generation
     auditCache.set(repoUrl, { result, repoUrl, timestamp: Date.now() });
+    
+    // Push to scan history
+    scanHistory.unshift({
+      repo: repoUrl,
+      full_name: repoData.metadata.full_name,
+      language: repoData.metadata.language,
+      stars: repoData.metadata.stars,
+      overall: result.scores?.overall || 0,
+      findings: result.statistics?.findings_count || 0,
+      critical: result.statistics?.critical_count || 0,
+      timestamp: Date.now(),
+    });
+    if (scanHistory.length > 20) scanHistory.length = 20;
 
     send('complete', { html: htmlReport });
     res.end();
