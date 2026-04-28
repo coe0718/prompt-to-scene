@@ -83,7 +83,16 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${scene.name || 'Scene'} — Prompt-to-Scene</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
+  <script>
+    // Load gif.js asynchronously so it doesn't block p5.js initialization
+    (function(){
+      var s = document.createElement('script');
+      s.src = 'https://unpkg.com/gif.js.optimized@1.0.1/dist/gif.js';
+      s.async = true;
+      s.onerror = function(){ console.warn('gif.js failed to load — GIF export disabled'); };
+      document.head.appendChild(s);
+    })();
+  </script>
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
     canvas { display: block; }
@@ -219,6 +228,7 @@ function buildHTML(spec, audioUrl, audioDataUrl) {
   </style>
 </head>
 <body>
+<div id="canvas-wrap"></div>
 <div id="drop-zone"><div class="label">Drop <b>MP3</b> or <b>WAV</b> here<br><span style="font-size:12px;opacity:0.5">or click to browse</span></div></div>
 <input type="file" id="file-input" accept="audio/mpeg,audio/wav,audio/ogg,audio/flac" style="display:none">
 
@@ -630,12 +640,14 @@ const INTENSITY_PRESETS = { chill: 0.25, balanced: 0.5, max: 0.9 };
 
 function setup() {
   let cw = windowWidth, ch = windowHeight;
+  const wrap = document.getElementById('canvas-wrap');
   if (CONFIG.aspect === '9:16') {
     cw = Math.min(windowWidth, windowHeight * 9/16 * 0.95);
     ch = windowHeight;
-    document.getElementById('canvas-wrap')?.classList.add('vertical');
+    if (wrap) wrap.classList.add('vertical');
   }
-  createCanvas(cw, ch);
+  const cnv = createCanvas(cw, ch);
+  if (wrap) cnv.parent(wrap);
   pixelDensity(1);
   colorMode(HSB, 360, 100, 100, 100);
 
@@ -1243,7 +1255,13 @@ function finishGifRecord() {
     // Create GIF at 320px wide
     const gifW = 320;
     const gifH = Math.round(gifW * (height / width));
-    const gif = new GIF({ workers: 2, quality: 8, width: gifW, height: gifH });
+    const gif = new GIF({
+      workers: 2,
+      quality: 8,
+      width: gifW,
+      height: gifH,
+      workerScript: 'https://unpkg.com/gif.js.optimized@1.0.1/dist/gif.worker.js'
+    });
 
     for (const frame of sampled) {
       // Scale down frame

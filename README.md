@@ -53,6 +53,20 @@ Prompt-to-Scene takes a natural language description (or an image, or an audio f
 | AIFF detection | onset detection via Web Audio analyser node |
 | Containerization | Docker + docker-compose |
 
+## Judge Demo
+
+**One-click auto-demo** (no interaction needed):
+```
+http://localhost:7041/?demo=1
+```
+This automatically generates a random scene with p5.js visuals, procedural audio, and a stitched final output.
+
+| URL | What it does |
+|-----|-------------|
+| `/?demo=1` or `/?demo=full` | Full auto-demo: preset → p5js → audio → stitcher |
+| `/?demo=quick` | Quick: just picks a preset and renders p5js |
+| `/#demo` | Same as `?demo=1` |
+
 ## Quick Start
 
 ```bash

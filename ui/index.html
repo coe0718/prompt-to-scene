@@ -1036,28 +1036,39 @@ function getCurrentSpec() {
 }
 
 // Hijack generateOutput() to attach runtime hooks and send live updates
-const originalGenerateOutput = generateOutput;
+// Note: We can't use the originalGenerateOutput pattern due to hoisting issues
+// Instead, we do the slider setup and then call generators directly
 function generateOutput(type, customSpec) {
-  const spec = customSpec || getCurrentSpec();
-  const specJSON = JSON.stringify(spec);
+ const spec = customSpec || getCurrentSpec();
+ const specJSON = JSON.stringify(spec);
 
-  // Set initial slider values
-  if (type === 'p5js') {
-    document.getElementById('runtime-tempo').value = spec.scene?.tempo || 120;
-    document.getElementById('runtime-intensity').value = spec.visual?.intensity || 0.5;
-    const palettes = {
-      ['#ff00ff','#00ffff','#2d1b69']:'cyberpunk',
-      ['#ff6b6b','#4ecdc4','#45b7d1']:'neon',
-      ['#4ecdc4','#a8e6cf','#ffd3b6']:'nature',
-      ['#ffb3ba','#bae1ff','#ffffba']:'pastel'
-    };
-    const pl = spec.visual?.color_palette?.[0] ? JSON.stringify(spec.visual.color_palette) : '';
-    document.getElementById('runtime-swatch').value = palettes[pl] || 'cyberpunk';
-    renderTimeline(spec);
-  }
+ // Set initial slider values
+ if (type === 'p5js') {
+ document.getElementById('runtime-tempo').value = spec.scene?.tempo || 120;
+ document.getElementById('runtime-intensity').value = spec.visual?.intensity || 0.5;
+ const paletteKeys = [
+  JSON.stringify(['#ff00ff','#00ffff','#2d1b69']),
+  JSON.stringify(['#ff6b6b','#4ecdc4','#45b7d1']),
+  JSON.stringify(['#4ecdc4','#a8e6cf','#ffd3b6']),
+  JSON.stringify(['#ffb3ba','#bae1ff','#ffffba'])
+ ];
+ const paletteVals = ['cyberpunk','neon','nature','pastel'];
+ const palettes = {};
+ paletteKeys.forEach((k,i) => palettes[k] = paletteVals[i]);
+ const pl = spec.visual?.color_palette?.[0] ? JSON.stringify(spec.visual.color_palette) : '';
+ document.getElementById('runtime-swatch').value = palettes[pl] || 'cyberpunk';
+ renderTimeline(spec);
+ }
 
-  // Send to original generator
-  return originalGenerateOutput(type);
+ // Call generator directly (not via originalGenerateOutput to avoid recursion)
+ switch (type) {
+ case 'p5js': generateP5JS(spec, specJSON); break;
+ case 'ascii': generateASCII(spec, specJSON); break;
+ case 'ascii-enhanced': generateASCIIEnhanced(spec, specJSON); break;
+ case 'procedural-audio': generateProceduralAudio(spec, specJSON); break;
+ case 'suno': alert('Suno generation requires Node.js server and API key.\nRun: node generators/suno.js test-spec.json'); break;
+ case 'stitcher': generateStitcher(spec, specJSON); break;
+ }
 }
 
 // Patch iframe prototype to inject updateRuntime() receiver
@@ -1083,28 +1094,6 @@ try {
     return oldSetAttribute.apply(this, arguments);
   }
 } catch(e) { console.warn('Could not patch iframe:', e); }
-
-  switch (type) {
-    case 'p5js':
-      generateP5JS(spec, specJSON);
-      break;
-    case 'ascii':
-      generateASCII(spec, specJSON);
-      break;
-    case 'ascii-enhanced':
-      generateASCIIEnhanced(spec, specJSON);
-      break;
-    case 'procedural-audio':
-      generateProceduralAudio(spec, specJSON);
-      break;
-    case 'suno':
-      alert('Suno generation requires Node.js server and API key.\nRun: node generators/suno.js test-spec.json');
-      break;
-    case 'stitcher':
-      generateStitcher(spec, specJSON);
-      break;
-  }
-}
 
 async function generateP5JS(spec, specJSON) {
   let html;
@@ -2016,15 +2005,72 @@ function startDemoRecord() {
 // ONE-CLICK DEMO — auto-plays on load with URL param ?demo=1
 // ═══════════════════════════════════════════════════════════════════════════
 
-function autoDemo() {
-  surpriseMe();
+async function autoDemo() {
+  // Show a brief splash so the judge sees something happening
+  const splash = document.createElement('div');
+  splash.id = 'demo-splash';
+  splash.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(6,6,10,0.95);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;transition:opacity 0.8s;';
+  splash.innerHTML = '<div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#c084fc,#60a5fa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Prompt-to-Scene</div><div style="color:#e0e0f0;font-size:14px;">Generating your scene...</div><div id="demo-step" style="color:rgba(255,255,255,0.35);font-size:11px;">Loading preset...</div>';
+  document.body.appendChild(splash);
+
+  function updateStep(text) {
+    const el = document.getElementById('demo-step');
+    if (el) el.textContent = text;
+  }
+
+  function hideSplash() {
+    const s = document.getElementById('demo-splash');
+    if (s) { s.style.opacity = '0'; setTimeout(() => s.remove(), 800); }
+  }
+
+  try {
+    // Step 1: Get a random scene (preset — no API key needed)
+    updateStep('🎨 Selecting scene...');
+    await surpriseMe();
+    const spec = getCurrentSpec();
+
+    // Step 2: Generate p5.js visual
+    updateStep('✨ Rendering p5.js visual...');
+    await new Promise(r => setTimeout(r, 600));
+    generateOutput('p5js');
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Step 3: Generate procedural audio
+    updateStep('🔊 Generating procedural audio...');
+    generateOutput('procedural-audio');
+    await new Promise(r => setTimeout(r, 1200));
+
+    // Step 4: Stitch them together
+    updateStep('🎬 Stitching final scene...');
+    generateOutput('stitcher');
+    await new Promise(r => setTimeout(r, 800));
+
+    // Step 5: Switch to final tab and reveal
+    updateStep('✅ Done!');
+    await new Promise(r => setTimeout(r, 400));
+    switchTab('final');
+    hideSplash();
+
+    // Update prompt display
+    document.getElementById('prompt-input').value = spec.prompt || '';
+    document.getElementById('status-time').textContent = new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error('Auto-demo failed:', e);
+    hideSplash();
+  }
 }
+
+// For ?demo=full — runs everything including audio + stitcher
+// For ?demo=1 or #demo — same full demo
+// For ?demo=quick — just p5js, fast
 
 init();
 
-// Auto-start demo if ?demo=1 in URL
-if (location.search.includes('demo=1') || location.hash === '#demo') {
+const demoParam = new URLSearchParams(location.search).get('demo');
+if (demoParam === '1' || demoParam === 'full' || location.hash === '#demo') {
   setTimeout(autoDemo, 500);
+} else if (demoParam === 'quick') {
+  setTimeout(() => surpriseMe(), 300);
 }
 </script>
 </body>
