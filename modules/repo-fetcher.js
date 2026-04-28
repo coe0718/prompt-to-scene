@@ -44,12 +44,13 @@ const PRIORITY_DIRS = ['src', 'lib', 'app', 'core', 'api', 'routes', 'controller
 function githubFetch(path) {
   return new Promise((resolve, reject) => {
     const url = GITHUB_API + path;
-    const options = {
-      headers: {
-        'User-Agent': 'Hermes-Repo-Auditor/1.0',
-        'Accept': 'application/vnd.github.v3+json',
-      }
+    const headers = {
+      'User-Agent': 'Hermes-Repo-Auditor/1.0',
+      'Accept': 'application/vnd.github.v3+json',
     };
+    const token = process.env.GITHUB_TOKEN;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const options = { headers };
     https.get(url, options, (res) => {
       let data = '';
       res.on('data', c => data += c);
