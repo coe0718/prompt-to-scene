@@ -1,5 +1,7 @@
-node_modules/
-.git/
-*.log
-STATUS.md
-*.patch
+node_modules
+.git
+.gitignore
+*.md
+.env
+.env.example
+.DS_Store

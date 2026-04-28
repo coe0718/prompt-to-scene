@@ -1,0 +1,20 @@
+review.example.com {
+    reverse_proxy app:7041
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+    }
+
+    # Gzip compression
+    encode gzip
+
+    # Log all requests
+    log {
+        output file /data/access.log
+    }
+}

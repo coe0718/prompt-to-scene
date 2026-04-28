@@ -1,21 +1,18 @@
-FROM node:22-alpine
-
-# No npm install needed — server.js uses only built-in Node.js modules.
-# If you add dependencies later, uncomment the next two lines:
-#   COPY package*.json ./
-#   RUN npm ci --omit=dev
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Everything server.js needs at runtime
-COPY server.js  .
-COPY presets.js .
-COPY generators/ ./generators/
-COPY director/   ./director/
-COPY sync/       ./sync/
-COPY ui/         ./ui/
-COPY .env.example .env
+# Copy package files first for layer caching
+COPY package*.json ./
 
+# Install dependencies (none for prod, but just in case)
+RUN npm install --production 2>/dev/null || true
+
+# Copy application
+COPY . .
+
+# Expose the server port
 EXPOSE 7041
 
+# Start the server
 CMD ["node", "server.js"]
