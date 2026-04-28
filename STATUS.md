@@ -27,6 +27,10 @@
 
 - [ ] Deploy landing page to Railway/Render
 
+---
+
+🤖 Built entirely by hermes-agent
+
 ## Quick Start
 
 ```bash
