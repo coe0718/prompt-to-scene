@@ -20,6 +20,68 @@ function generateReport(auditResult, repoUrl) {
   const scoreColor = (v) =>
     v >= 85 ? '#4ade80' : v >= 65 ? '#fbbf24' : v >= 45 ? '#fb923c' : '#f87171';
 
+  const radarChart = (s) => {
+    const keys = ['architecture', 'code_quality', 'security', 'documentation', 'maintainability'];
+    const labels = ['Architecture', 'Code Quality', 'Security', 'Documentation', 'Maint\'ability'];
+    const cx = 180, cy = 180, maxR = 140;
+    const angle = (i) => (Math.PI / 180) * (-90 + i * 72);
+    const point = (r, i) => [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))];
+
+    // Grid rings (20, 40, 60, 80, 100)
+    let rings = '';
+    for (let r = 20; r <= 100; r += 20) {
+      const pts = [];
+      for (let i = 0; i < 5; i++) pts.push(point(r / 100 * maxR, i).join(','));
+      rings += `<polygon points="${pts.join(' ')}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>`;
+    }
+
+    // Axes
+    let axes = '';
+    for (let i = 0; i < 5; i++) {
+      const [x2, y2] = point(maxR, i);
+      axes += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    }
+
+    // Data polygon
+    const dataPts = [];
+    for (let i = 0; i < 5; i++) {
+      const val = Math.min(Math.max(s?.[keys[i]] || 0, 0), 100);
+      dataPts.push(point(val / 100 * maxR, i).join(','));
+    }
+    const avgScore = Math.round(keys.reduce((sum, k) => sum + (s?.[k] || 0), 0) / 5);
+    const fillColor = scoreColor(avgScore);
+
+    // Axis labels
+    let labelTexts = '';
+    for (let i = 0; i < 5; i++) {
+      const [x, y] = point(maxR + 22, i);
+      labelTexts += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">${labels[i]}</text>`;
+    }
+
+    // Value labels at data points
+    let valueTexts = '';
+    for (let i = 0; i < 5; i++) {
+      const val = Math.min(Math.max(s?.[keys[i]] || 0, 0), 100);
+      const [x, y] = point(val / 100 * maxR + 16, i);
+      valueTexts += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="${scoreColor(val)}" font-size="11" font-weight="600" font-family="Inter,sans-serif">${val}</text>`;
+    }
+
+    return `<div style="display:inline-block;padding:16px;">
+      <div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Health Radar</div>
+      <svg width="360" height="380" viewBox="0 0 360 380" xmlns="http://www.w3.org/2000/svg">
+        ${rings}
+        ${axes}
+        <polygon points="${dataPts.join(' ')}" fill="${fillColor}" fill-opacity="0.2" stroke="${fillColor}" stroke-width="2"/>
+        ${dataPts.map((pt, i) => {
+          const [x, y] = pt.split(',');
+          return `<circle cx="${x}" cy="${y}" r="4" fill="${fillColor}" stroke="#06060e" stroke-width="2"/>`;
+        }).join('')}
+        ${labelTexts}
+        ${valueTexts}
+      </svg>
+    </div>`;
+  };
+
   const findingsHtml = (findings || []).map(f => {
     const severityColor = f.severity === 'CRITICAL' ? 'var(--red)' : f.severity === 'WARNING' ? 'var(--amber)' : 'var(--cyan)';
     return `<div class="finding" style="border-left:3px solid ${severityColor}">
@@ -184,6 +246,10 @@ function generateReport(auditResult, repoUrl) {
     font-size: 0.78rem; color: var(--muted);
   }
 
+  /* Radar Chart */
+  .radar-section { padding: 20px 0; text-align: center; border-top: 1px solid var(--border); }
+  .radar-section svg { max-width: 360px; height: auto; }
+
   /* Footer */
   .footer {
     padding: 32px 0; border-top: 1px solid var(--border);
@@ -237,6 +303,11 @@ function generateReport(auditResult, repoUrl) {
         <div class="score-number" style="color:${scoreColor(scores?.overall || 0)}">${scores?.overall || 0}</div>
       </div>
     </div>
+  </div>
+
+  <!-- Radar Chart -->
+  <div class="radar-section">
+    ${radarChart(scores)}
   </div>
 
   <!-- Verdict -->

@@ -90,6 +90,7 @@ const FAMOUS_REPOS = [
   'facebook/react',
   'vuejs/core',
   'facebook/jest',
+  'coe0718/hackathon-creative',
 ];
 const FAMOUS_FILE = path.join(DATA_DIR, 'famous-repos.json');
 let famousResults = [];
