@@ -291,15 +291,21 @@
     color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
   }
   .history-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 0; font-size: 0.82rem;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; font-size: 0.82rem;
     border-bottom: 1px solid var(--border); cursor: pointer;
     transition: color 0.2s;
   }
   .history-item:last-child { border-bottom: none; }
   .history-item:hover { color: var(--accent); }
-  .history-item .h-repo { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
-  .history-item .h-score { font-weight: 600; font-size: 0.82rem; }
+  .history-item .h-repo { font-family: 'JetBrains Mono', monospace; font-size: 0.83rem; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-item .h-score {
+    font-weight: 700; font-size: 1.1rem; padding: 2px 10px;
+    border-radius: 6px; background: var(--surface);
+    border: 1px solid var(--border); letter-spacing: -0.02em;
+    min-width: 36px; text-align: center;
+  }
+  .history-item .h-meta { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
   .history-empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px 0; }
 
   @media (max-width: 860px) {
@@ -638,7 +644,7 @@
   <p>Every line of code in this project was written by autonomous AI agents.<br>No human wrote a single line.</p>
   <div class="cta-group" style="justify-content:center;">
     <a href="#try" class="btn btn-primary">Try the Auditor →</a>
-    <a href="https://github.com/coe0718/hackathon-creative" class="btn btn-glass" target="_blank">View Source →</a>
+    <a href="https://github.com/coe0718/archiview" class="btn btn-glass" target="_blank">View Source →</a>
   </div>
 </section>
 
@@ -1004,12 +1010,11 @@ async function refreshHistory() {
       var trendIcon = h.trend === 'up' ? '↑' : h.trend === 'down' ? '↓' : h.trend === 'same' ? '→' : '';
       var trendColor = h.trend === 'up' ? 'var(--green)' : h.trend === 'down' ? 'var(--red)' : 'var(--muted)';
       return '<div class="history-item" onclick="loadCachedReport(\'' + escHtml(h.repo) + '\')">' +
-        '<div><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
-        '<div style="font-size:0.72rem;color:var(--muted);">' + (h.language || '') + badge + '</div></div>' +
-        '<div><div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
-        (trendIcon ? '<div style="font-size:0.7rem;color:' + trendColor + ';text-align:right;">' + trendIcon + '</div>' : '') +
-        '</div>' +
-        '<div style="font-size:0.65rem;color:var(--muted);opacity:0.4;margin-left:auto;cursor:pointer;padding:2px 4px;border-radius:4px;" onclick="event.stopPropagation();setRepo(\'' + escHtml(h.repo) + '\');runAudit();" title="Re-audit">↻</div>' +
+        '<div style="flex:1;min-width:0;"><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
+        '<div class="h-meta">' + (h.language || '') + badge + '</div></div>' +
+        '<div class="h-score" style="color:' + scoreColor + ';border-color:' + scoreColor + '20' + '">' + h.overall + '</div>' +
+        (trendIcon ? '<div style="font-size:0.7rem;color:' + trendColor + ';">' + trendIcon + '</div>' : '') +
+        '<div style="font-size:0.65rem;color:var(--muted);opacity:0.4;cursor:pointer;padding:2px 4px;border-radius:4px;" onclick="event.stopPropagation();setRepo(\'' + escHtml(h.repo) + '\');runAudit();" title="Re-audit">↻</div>' +
         '</div>';
     }).join('');
   } catch(e) {
