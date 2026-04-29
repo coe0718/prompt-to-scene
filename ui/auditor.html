@@ -530,12 +530,21 @@
       <span class="progress-step" id="p-deep"><span class="p-dot"></span> Deep analysis</span>
       <span class="progress-step" id="p-report"><span class="p-dot"></span> Report</span>
     </div>
+    <div id="progress-track" style="display:none;margin-bottom:16px;">
+      <div style="height:3px;background:var(--surface2);border-radius:99px;overflow:hidden;">
+        <div id="progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;transition:width 0.5s cubic-bezier(0.22,1,0.36,1);"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--muted);margin-top:3px;padding:0 2px;">
+        <span>Fetch</span><span>Structure</span><span>Deep</span><span>Report</span>
+      </div>
+    </div>
     <div id="status"></div>
     <div id="result"></div>
     <div id="result-toolbar" style="display:none;margin-top:12px;gap:8px;flex-wrap:wrap;" class="result-toolbar">
       <button class="btn btn-glass" onclick="downloadReport()" style="font-size:0.82rem;padding:8px 16px;">📄 Download HTML</button>
       <button class="btn btn-glass" onclick="printReport()" style="font-size:0.82rem;padding:8px 16px;">🖨️ Print / Save as PDF</button>
       <button class="btn btn-glass" onclick="copyBadgeMarkdown()" style="font-size:0.82rem;padding:8px 16px;">🏷️ Copy Badge MD</button>
+      <button class="btn btn-glass" onclick="shareOnX()" style="font-size:0.82rem;padding:8px 16px;">𝕏 Share Score</button>
     </div>
 
     <!-- PR Generation Section -->
@@ -668,6 +677,8 @@ async function runAudit() {
   const result = document.getElementById('result');
   const toolbar = document.getElementById('result-toolbar');
   const progress = document.getElementById('progress');
+  const progressTrack = document.getElementById('progress-track');
+  const progressFill = document.getElementById('progress-fill');
 
   const repo = input.value.trim();
   if (!repo) { status.textContent = '⚠️ Enter a GitHub repo URL'; return; }
@@ -678,6 +689,8 @@ async function runAudit() {
   result.style.display = 'none';
   toolbar.style.display = 'none';
   progress.style.display = 'flex';
+  progressTrack.style.display = 'block';
+  progressFill.style.width = '0%';
   lastReportHtml = '';
 
   function setStep(id, state) {
@@ -708,11 +721,15 @@ async function runAudit() {
     }
     status.innerHTML = '<span class="spinner"></span> ' + escHtml(msg);
     status.appendChild(timerEl);
+    // Update progress bar
+    var fillPct = { fetch: 25, structural: 50, deep: 75, aggregation: 85, report: 100 };
+    if (fillPct[step]) progressFill.style.width = fillPct[step] + '%';
   }
 
   try {
     setStep('p-fetch', 'done');
     setStep('p-structural', 'active');
+    progressFill.style.width = '25%';
     status.innerHTML = '<span class="spinner"></span> Starting audit...';
     status.appendChild(timerEl);
 
@@ -790,14 +807,16 @@ async function runAudit() {
     window.history.replaceState(null, '', '?repo=' + encodeURIComponent(cleanRepo));
 
     setStep('p-report', 'done');
+    progressFill.style.width = '100%';
     result.style.display = 'block';
     result.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report"></iframe>';
     toolbar.style.display = 'flex';
     clearInterval(timerInterval);
-    status.innerHTML = '<span style="color:var(--green);">Audit complete. Report loaded above.</span>';
+    status.innerHTML = '<span style="color:var(--green);">✓ Audit complete. Report loaded above.</span>';
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
     refreshHistory();
+    confettiBurst();
   } catch(e) {
     clearInterval(timerInterval);
     const msg = e.name === 'AbortError' ? 'Request timed out. The LLM may be slow or unreachable.' : e.message;
@@ -849,6 +868,64 @@ function copyBadgeMarkdown() {
   }).catch(function() {
     prompt('Copy this badge markdown:', md);
   });
+}
+
+// ─── Confetti burst ───────────────────────────────────────────────────────
+function confettiBurst() {
+  var canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999999;';
+  document.body.appendChild(canvas);
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width = window.innerWidth;
+  var H = canvas.height = window.innerHeight;
+  var particles = [];
+  var colors = ['#7c5cfc','#5ce1e6','#f472b6','#4ade80','#fbbf24','#f87171','#22d3ee'];
+  for (var i = 0; i < 120; i++) {
+    particles.push({
+      x: W * 0.5 + (Math.random() - 0.5) * W * 0.6,
+      y: H * 0.3 + (Math.random() - 0.5) * H * 0.2,
+      vx: (Math.random() - 0.5) * 8,
+      vy: -Math.random() * 10 - 3,
+      w: Math.random() * 8 + 4,
+      h: Math.random() * 4 + 2,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      rotV: (Math.random() - 0.5) * 10,
+      life: 1,
+    });
+  }
+  var frames = 0;
+  function animate() {
+    if (frames++ > 120) { document.body.removeChild(canvas); return; }
+    ctx.clearRect(0, 0, W, H);
+    for (var p of particles) {
+      p.x += p.vx;
+      p.vy += 0.15;
+      p.y += p.vy;
+      p.rot += p.rotV;
+      p.life -= 0.008;
+      if (p.life <= 0) continue;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI / 180);
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+// ─── Share on X ────────────────────────────────────────────────────────────
+function shareOnX() {
+  if (!lastAuditedRepo) return;
+  var repo = lastAuditedRepo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  var badgeUrl = encodeURIComponent(window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(repo));
+  var appUrl = encodeURIComponent(window.location.origin + '/?repo=' + encodeURIComponent(repo));
+  var text = encodeURIComponent('My codebase scored 65/100 on @HermesAgent\'s autonomous audit! How does yours stack up? 🏷️');
+  window.open('https://twitter.com/intent/tweet?text=' + text + '&url=' + appUrl, '_blank', 'width=600,height=400');
 }
 
 // ─── Share link ───────────────────────────────────────────────────────────

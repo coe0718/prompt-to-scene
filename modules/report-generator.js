@@ -12,7 +12,7 @@ function generateReport(auditResult, repoUrl) {
     <div class="score-row">
       <div class="score-label">${label}</div>
       <div class="score-bar-bg">
-        <div class="score-bar" style="width:${val}%;background:${color}"></div>
+        <div class="score-bar" data-width="${val}" style="background:${color}"></div>
       </div>
       <div class="score-val">${val}</div>
     </div>`;
@@ -173,7 +173,7 @@ function generateReport(auditResult, repoUrl) {
   .score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .score-label { width: 130px; font-size: 0.85rem; color: var(--muted); flex-shrink: 0; }
   .score-bar-bg { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
-  .score-bar { height: 100%; border-radius: 4px; transition: width 0.5s; }
+  .score-bar { height: 100%; border-radius: 4px; width: 0; transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
   .score-val { width: 30px; text-align: right; font-size: 0.85rem; font-weight: 600; color: var(--text); }
 
   /* Architecture */
@@ -370,6 +370,9 @@ function generateReport(auditResult, repoUrl) {
   </div>
 
 </div>
+<script>
+(function(){var b=document.querySelectorAll('.score-bar');b.forEach(function(el,i){var w=parseInt(el.getAttribute('data-width'),10);setTimeout(function(){el.style.width=w+'%';},i*80);});})();
+</script>
 </body>
 </html>`;
 }
