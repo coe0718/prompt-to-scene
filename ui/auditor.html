@@ -204,12 +204,14 @@
     border-top: 1px solid var(--border);
   }
   .audit-card {
-    max-width: 700px; margin: 0 auto;
+    margin: 0 auto;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 32px;
   }
+  .audit-layout { display: flex; gap: 24px; align-items: flex-start; }
+  .audit-main { max-width: 700px; flex: 1; min-width: 0; }
   .audit-card .input-group {
     display: flex; gap: 8px; margin-bottom: 12px;
   }
@@ -276,11 +278,12 @@
   .history-item .h-repo { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
   .history-item .h-score { font-weight: 600; font-size: 0.82rem; }
   .history-empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px 0; }
-  @media (min-width: 1100px) {
-    .audit-layout { display: flex; gap: 24px; align-items: flex-start; }
-    .audit-main { flex: 1; min-width: 0; }
-    .sidebar-right { display: block; }
+
+  @media (max-width: 860px) {
+    .audit-layout { flex-direction: column; }
+    .sidebar-right { display: none !important; }
   }
+
   .spinner {
     display: inline-block; width: 14px; height: 14px;
     border-radius: 50%;
