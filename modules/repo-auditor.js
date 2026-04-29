@@ -46,7 +46,7 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
       model: config.model,
       messages,
       temperature,
-      max_tokens: 2048,
+      max_tokens: 4096,
     });
 
     const urlObj = new URL(config.url);
@@ -72,9 +72,9 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
         }
       });
     });
-    req.setTimeout(60000, () => {
+    req.setTimeout(180000, () => {
       req.destroy();
-      reject(new Error('LLM request timed out after 60s'));
+      reject(new Error('LLM request timed out after 180s'));
     });
     req.on('error', reject);
     req.write(body);
