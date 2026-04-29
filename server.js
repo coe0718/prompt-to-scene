@@ -27,11 +27,10 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
-// ─── Crash recovery: auto-restart on failure ────────────────────────────────
+// ─── Crash recovery: log but don't exit — keep serving ──────────────────
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught exception:', err.message);
-  console.log('🔄 Restarting in 2s...');
-  setTimeout(() => { process.exit(1); }, 2000);
+  console.error(err.stack?.slice(0, 500));
 });
 
 process.on('unhandledRejection', (reason) => {
@@ -699,17 +698,20 @@ async function handleAudit(req, res) {
   });
 
   let timedOut = false;
+  let reqClosed = false;
+  res.on('close', () => { reqClosed = true; });
+  
   res.setTimeout(240000, () => {
     timedOut = true;
     if (!res.writableEnded) {
-      res.write(`event: error\ndata: ${JSON.stringify({ message: 'Audit timed out. Try a smaller repo.' })}\n\n`);
-      res.end();
+      try { res.write(`event: error\ndata: ${JSON.stringify({ message: 'Audit timed out. Try a smaller repo.' })}\n\n`); } catch(e) {}
+      try { res.end(); } catch(e) {}
     }
   });
 
   const send = (event, data) => {
-    if (!res.writableEnded && !timedOut) {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (!res.writableEnded && !timedOut && !reqClosed) {
+      try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch(e) {}
     }
   };
 
