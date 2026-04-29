@@ -235,16 +235,20 @@
   .audit-options label {
     font-size: 0.8rem; color: var(--muted);
   }
-  .audit-options select {
-    padding: 6px 10px; border-radius: 6px;
+  .audit-options select,
+  .audit-options select:focus { display: none; }
+  .file-chips { display: flex; gap: 4px; }
+  .file-chip {
+    padding: 4px 12px; border-radius: 6px;
     border: 1px solid var(--border);
     background: rgba(255,255,255,0.04);
-    color: var(--text); font-size: 0.82rem;
-    font-family: inherit; outline: none; cursor: pointer;
+    color: var(--muted); font-size: 0.82rem;
+    font-family: inherit; cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
   }
-  .audit-options select:focus {
-    border-color: var(--accent);
-  }
+  .file-chip:hover { border-color: var(--accent); color: var(--text); background: rgba(124,92,252,0.08); }
+  .file-chip.active { border-color: var(--accent); background: rgba(124,92,252,0.15); color: var(--accent); font-weight: 600; }
   .audit-options .file-hint {
     font-size: 0.75rem; color: rgba(255,255,255,0.2);
   }
@@ -515,13 +519,13 @@
       <button id="audit-btn" class="btn btn-primary" onclick="runAudit()" style="padding:14px 24px;flex-shrink:0;">Audit →</button>
     </div>
     <div class="audit-options">
-      <label for="file-count">Files to analyze:</label>
-      <select id="file-count">
-        <option value="10" selected>10</option>
-        <option value="25">25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select>
+      <label>Files to analyze:</label>
+      <div class="file-chips" id="file-chips">
+        <span class="file-chip active" data-value="10" onclick="selectFileCount(this,10)">10</span>
+        <span class="file-chip" data-value="25" onclick="selectFileCount(this,25)">25</span>
+        <span class="file-chip" data-value="50" onclick="selectFileCount(this,50)">50</span>
+        <span class="file-chip" data-value="100" onclick="selectFileCount(this,100)">100</span>
+      </div>
       <span class="file-hint">More files = slower but deeper analysis</span>
     </div>
     <div id="progress" class="progress-steps" style="display:none;">
@@ -670,6 +674,39 @@ function setRepo(repo) {
   document.getElementById('repo-input').value = repo;
 }
 
+window._selectedFileCount = 10;
+
+function selectFileCount(el, val) {
+  document.querySelectorAll('.file-chip').forEach(function(c) { c.classList.remove('active'); });
+  el.classList.add('active');
+  window._selectedFileCount = val;
+}
+
+function loadCachedReport(repo) {
+  setRepo(repo);
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('result').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);"><span class="spinner"></span> Loading cached report...</div>';
+  fetch('/report?repo=' + encodeURIComponent(repo))
+    .then(function(r) {
+      if (!r.ok) throw new Error('No cached report');
+      return r.text();
+    })
+    .then(function(html) {
+      lastReportHtml = html;
+      document.getElementById('result').style.display = 'block';
+      document.getElementById('result').innerHTML = '<iframe srcdoc="' + escHtml(html) + '" title="Audit Report"></iframe>';
+      document.getElementById('result-toolbar').style.display = 'flex';
+      document.getElementById('status').innerHTML = '<span style="color:var(--green);">✓ Loaded cached report for ' + escHtml(repo) + '</span>';
+      lastAuditedRepo = repo;
+      document.getElementById('pr-section').style.display = 'block';
+    })
+    .catch(function() {
+      // No cached report — run fresh audit
+      document.getElementById('status').innerHTML = 'No cached report found. Running fresh audit...';
+      runAudit();
+    });
+}
+
 async function runAudit() {
   const input = document.getElementById('repo-input');
   const btn = document.getElementById('audit-btn');
@@ -739,7 +776,7 @@ async function runAudit() {
     const resp = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo, maxFiles: parseInt(document.getElementById('file-count').value, 10) || 10 }),
+      body: JSON.stringify({ repo, maxFiles: window._selectedFileCount || 10 }),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -966,12 +1003,13 @@ async function refreshHistory() {
       var badge = h.critical > 0 ? ' <span style="color:var(--red);font-size:0.7rem;">' + h.critical + '</span>' : '';
       var trendIcon = h.trend === 'up' ? '↑' : h.trend === 'down' ? '↓' : h.trend === 'same' ? '→' : '';
       var trendColor = h.trend === 'up' ? 'var(--green)' : h.trend === 'down' ? 'var(--red)' : 'var(--muted)';
-      return '<div class="history-item" onclick="setRepo(\'' + escHtml(h.repo) + '\');runAudit();">' +
+      return '<div class="history-item" onclick="loadCachedReport(\'' + escHtml(h.repo) + '\')">' +
         '<div><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
         '<div style="font-size:0.72rem;color:var(--muted);">' + (h.language || '') + badge + '</div></div>' +
         '<div><div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
         (trendIcon ? '<div style="font-size:0.7rem;color:' + trendColor + ';text-align:right;">' + trendIcon + '</div>' : '') +
         '</div>' +
+        '<div style="font-size:0.65rem;color:var(--muted);opacity:0.4;margin-left:auto;cursor:pointer;padding:2px 4px;border-radius:4px;" onclick="event.stopPropagation();setRepo(\'' + escHtml(h.repo) + '\');runAudit();" title="Re-audit">↻</div>' +
         '</div>';
     }).join('');
   } catch(e) {

@@ -33,13 +33,22 @@ const LLM_ENDPOINTS = {
       'Authorization': `Bearer ${key}`,
     }),
   },
+  fast: {
+    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+    model: 'meta/llama-3.2-3b-instruct',
+    key: () => process.env.NVIDIA_API_KEY || '',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    }),
+  },
 };
 
 function callLLM(messages, model = 'minimax', temperature = 0.3) {
   const config = LLM_ENDPOINTS[model];
   if (!config) throw new Error('Unknown model: ' + model);
   const key = config.key();
-  if (!key && model === 'kimi') throw new Error('NVIDIA_API_KEY not set');
+  if (!key && (model === 'kimi' || model === 'fast')) throw new Error('NVIDIA_API_KEY not set');
 
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
@@ -72,9 +81,9 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
         }
       });
     });
-    req.setTimeout(180000, () => {
+    req.setTimeout(300000, () => {
       req.destroy();
-      reject(new Error('LLM request timed out after 180s'));
+      reject(new Error('LLM request timed out after 300s'));
     });
     req.on('error', reject);
     req.write(body);
@@ -278,13 +287,13 @@ async function analyzeRepo(repoData, onProgress) {
 
   for (let i = 0; i < chunks.length; i++) {
     console.log(`Auditor:   Deep chunk ${i + 1}/${chunks.length} (${chunks[i].length} files)...`);
-    onProgress && onProgress('deep', `Kimi reviewing files (chunk ${i+1}/${chunks.length})...`);
+    onProgress && onProgress('deep', `AI reviewing files (chunk ${i+1}/${chunks.length})...`);
     const chunkContent = chunks[i].join('\n\n');
     try {
       const raw = await callLLM([
         { role: 'system', content: DEEP_ANALYSIS_SYSTEM },
         { role: 'user', content: `Analyze these files:\n\n${chunkContent.slice(0, 6000)}` },
-      ], model);
+      ], model === 'kimi' ? 'fast' : model);
       const parsed = JSON.parse(extractJSON(raw));
       deepResults.push(parsed);
     } catch(e) {
