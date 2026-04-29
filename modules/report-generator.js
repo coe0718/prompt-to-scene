@@ -291,17 +291,13 @@ function generateReport(auditResult, repoUrl) {
   <!-- Scores -->
   <div class="dashboard">
     <h2>Score Dashboard</h2>
-    <div class="score-grid">
-      ${['architecture', 'code_quality', 'security', 'documentation', 'maintainability'].map(key =>
-        `<div class="score-card" style="text-align:center">
-          <div class="score-title">${key.replace('_', ' ')}</div>
-          <div class="score-number" style="color:${scoreColor(scores?.[key] || 0)}">${scores?.[key] || 0}</div>
-        </div>`
-      ).join('\n')}
-      <div class="score-card" style="text-align:center;border-color:rgba(124,92,252,0.4);background:rgba(124,92,252,0.06);">
-        <div class="score-title" style="color:var(--accent)">overall</div>
-        <div class="score-number" style="color:${scoreColor(scores?.overall || 0)}">${scores?.overall || 0}</div>
-      </div>
+    <div style="padding:8px 0;">
+      ${scoreBar('Architecture', scores?.architecture || 0, scoreColor(scores?.architecture || 0))}
+      ${scoreBar('Code Quality', scores?.code_quality || 0, scoreColor(scores?.code_quality || 0))}
+      ${scoreBar('Security', scores?.security || 0, scoreColor(scores?.security || 0))}
+      ${scoreBar('Documentation', scores?.documentation || 0, scoreColor(scores?.documentation || 0))}
+      ${scoreBar('Maintainability', scores?.maintainability || 0, scoreColor(scores?.maintainability || 0))}
+      ${scoreBar('Overall', scores?.overall || 0, '#7c5cfc')}
     </div>
   </div>
 
