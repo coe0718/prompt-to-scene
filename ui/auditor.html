@@ -204,14 +204,14 @@
     border-top: 1px solid var(--border);
   }
   .audit-card {
-    margin: 0 auto;
+    max-width: 700px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 32px;
   }
-  .audit-layout { display: flex; gap: 24px; align-items: flex-start; }
-  .audit-main { max-width: 700px; flex: 1; min-width: 0; }
+  .demo-row { display: flex; gap: 24px; align-items: flex-start; justify-content: center; }
+  .demo-main { max-width: 700px; min-width: 0; }
   .audit-card .input-group {
     display: flex; gap: 8px; margin-bottom: 12px;
   }
@@ -280,7 +280,7 @@
   .history-empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px 0; }
 
   @media (max-width: 860px) {
-    .audit-layout { flex-direction: column; }
+    .demo-row { flex-direction: column; align-items: stretch; }
     .sidebar-right { display: none !important; }
   }
 
@@ -493,9 +493,8 @@
 <section class="demo-section container" id="try">
   <div class="section-label">Try It</div>
   <div class="section-title">Audit any public repo</div>
-  <div class="audit-card">
-    <div class="audit-layout">
-    <div class="audit-main">
+  <div class="demo-row">
+  <div class="audit-card demo-main">
     <div class="examples">
       <span class="example" onclick="setRepo('expressjs/express')">expressjs/express</span>
       <span class="example" onclick="setRepo('prettier/prettier')">prettier/prettier</span>
@@ -534,7 +533,7 @@
       </div>
       <div id="pr-plan" style="display:none;margin-top:16px;padding:16px;background:var(--surface2);border-radius:12px;"></div>
     </div>
-  </div> <!-- audit-main -->
+  </div> <!-- audit-card -->
 
   <!-- Sidebar: Scan History -->
   <div class="sidebar-right" id="sidebar-history">
@@ -547,8 +546,8 @@
       <div style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;">Add <code style="color:var(--accent);">?repo=user/repo</code> to the URL to share with a pre-loaded repo.</div>
       <button class="btn btn-glass" onclick="copyShareLink()" style="font-size:0.78rem;padding:6px 12px;width:100%;">📋 Copy Share Link</button>
     </div>
-  </div>
-  </div> <!-- audit-layout -->
+  </div> <!-- sidebar-right -->
+  </div> <!-- demo-row -->
 </section>
 
 <!-- Features -->
