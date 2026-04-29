@@ -299,12 +299,14 @@
   .history-item:last-child { border-bottom: none; }
   .history-item:hover { color: var(--accent); }
   .history-item .h-repo { font-family: 'JetBrains Mono', monospace; font-size: 0.83rem; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-item .h-score-group { display: flex; align-items: center; gap: 4px; }
   .history-item .h-score {
-    font-weight: 700; font-size: 1.1rem; padding: 2px 10px;
-    border-radius: 6px; background: var(--surface);
+    font-weight: 700; font-size: 0.88rem; padding: 1px 8px;
+    border-radius: 5px; background: var(--surface);
     border: 1px solid var(--border); letter-spacing: -0.02em;
-    min-width: 36px; text-align: center;
+    min-width: 30px; text-align: center;
   }
+  .history-item .h-trend { font-size: 0.65rem; min-width: 10px; text-align: center; display: inline-block; }
   .history-item .h-meta { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
   .history-empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px 0; }
 
@@ -518,7 +520,7 @@
       <span class="example" onclick="setRepo('psf/black')">psf/black</span>
       <span class="example" onclick="setRepo('rust-lang/rust')">rust-lang/rust</span>
       <span class="example" onclick="setRepo('nousresearch/hermes-agent')">nousresearch/hermes-agent</span>
-      <span class="example" onclick="setRepo('coe0718/hackathon-creative')" style="border-color:rgba(124,92,252,0.3);color:var(--accent);">🔍 self-audit</span>
+      <span class="example" onclick="setRepo('coe0718/archiview')" style="border-color:rgba(124,92,252,0.3);color:var(--accent);">🔍 self-audit</span>
     </div>
     <div class="input-group">
       <input id="repo-input" type="text" placeholder="user/repo or full GitHub URL" autofocus>
@@ -1012,9 +1014,11 @@ async function refreshHistory() {
       return '<div class="history-item" onclick="loadCachedReport(\'' + escHtml(h.repo) + '\')">' +
         '<div style="flex:1;min-width:0;"><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
         '<div class="h-meta">' + (h.language || '') + badge + '</div></div>' +
-        '<div class="h-score" style="color:' + scoreColor + ';border-color:' + scoreColor + '20' + '">' + h.overall + '</div>' +
-        (trendIcon ? '<div style="font-size:0.7rem;color:' + trendColor + ';">' + trendIcon + '</div>' : '') +
-        '<div style="font-size:0.65rem;color:var(--muted);opacity:0.4;cursor:pointer;padding:2px 4px;border-radius:4px;" onclick="event.stopPropagation();setRepo(\'' + escHtml(h.repo) + '\');runAudit();" title="Re-audit">↻</div>' +
+        '<div class="h-score-group">' +
+        '<div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
+        '<div class="h-trend" style="color:' + trendColor + '">' + (trendIcon || '') + '</div>' +
+        '</div>' +
+        '<div style="font-size:0.65rem;color:var(--muted);opacity:0.4;cursor:pointer;padding:2px 4px;" onclick="event.stopPropagation();setRepo(\'' + escHtml(h.repo) + '\');runAudit();" title="Re-audit">↻</div>' +
         '</div>';
     }).join('');
   } catch(e) {
