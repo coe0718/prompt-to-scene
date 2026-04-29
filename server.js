@@ -66,10 +66,12 @@ const auditCache = new Map();
 const scanHistory = [];
 const DATA_DIR = path.join(__dirname, 'data');
 const HISTORY_FILE = path.join(DATA_DIR, 'scan-history.json');
+const REPORTS_DIR = path.join(DATA_DIR, 'reports');
 
 // Load persisted history
 try {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
   if (fs.existsSync(HISTORY_FILE)) {
     const loaded = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
     if (Array.isArray(loaded)) scanHistory.push(...loaded);
@@ -416,6 +418,26 @@ if (url.pathname === '/api/audit/badge' && method === 'GET') {
 }
 if (url.pathname === '/api/audit/famous' && method === 'GET') {
   return jsonResponse(res, 200, famousResults);
+}
+
+// ── Cached report ───────────────────────────────────────────────────────
+if (url.pathname === '/report' && method === 'GET') {
+  var repo = (url.searchParams.get('repo') || '').trim();
+  if (!repo) return jsonResponse(res, 400, { error: '?repo=user/repo required' });
+  var safeName = repo.replace(/https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9_\/-]/g, '_').replace(/\//g, '__');
+  var reportPath = path.join(REPORTS_DIR, safeName + '.html');
+  if (fs.existsSync(reportPath)) {
+    return serveFile(res, reportPath);
+  }
+  // Check the in-memory audit cache as fallback
+  var cached = auditCache.get(repo);
+  if (cached && cached.result) {
+    var html = reportGen.generateReport(cached.result, repo);
+    try { fs.writeFileSync(reportPath, html, 'utf8'); } catch(e) {}
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+    return res.end(html);
+  }
+  return jsonResponse(res, 404, { error: 'No report found for ' + repo + '. Run an audit first.', hint: 'POST /api/audit with { repo: "user/repo" }' });
 }
 
 // ── Landing page ───────────────────────────────────────────────────────────
@@ -800,6 +822,14 @@ async function handleAudit(req, res) {
     saveHistory();
 
     send('complete', { html: htmlReport });
+    // Persist report to file for /report route
+    try {
+      var safeName = repoUrl.replace(/https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9_\/-]/g, '_').replace(/\//g, '__');
+      var reportPath = path.join(REPORTS_DIR, safeName + '.html');
+      fs.writeFileSync(reportPath, htmlReport, 'utf8');
+      console.log(`✓ Report saved: ${reportPath}`);
+    } catch(e) { console.warn('Could not save report file:', e.message); }
+
     res.end();
   } catch(e) {
     console.error(`Audit error for ${repoUrl}:`, e.message);

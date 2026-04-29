@@ -1128,6 +1128,35 @@ function loadFamousRepos() {
 
 loadFamousRepos();
 
+// ─── Auto-load from URL param ──────────────────────────────────────────
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var repo = params.get('repo');
+  if (repo) {
+    document.getElementById('repo-input').value = repo;
+    // Try to load cached report
+    fetch('/report?repo=' + encodeURIComponent(repo))
+      .then(function(r) {
+        if (!r.ok) throw new Error('No cached report');
+        return r.text();
+      })
+      .then(function(html) {
+        lastReportHtml = html;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('result').innerHTML = '<iframe srcdoc="' + escHtml(html) + '" title="Audit Report"></iframe>';
+        document.getElementById('result-toolbar').style.display = 'flex';
+        document.getElementById('status').innerHTML = '<span style="color:var(--green);">✓ Cached report loaded for ' + escHtml(repo) + '</span>';
+        lastAuditedRepo = repo;
+        document.getElementById('pr-section').style.display = 'block';
+        refreshHistory();
+      })
+      .catch(function() {
+        // No cached report — user will click Audit
+        document.getElementById('status').innerHTML = 'Repo <strong>' + escHtml(repo) + '</strong> loaded. Click <strong>Audit →</strong> to analyze.';
+      });
+  }
+})();
+
 setInterval(function() {
   loadFamousRepos();
 }, 30000); // Refresh famous repos every 30s
