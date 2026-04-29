@@ -1,180 +1,196 @@
-# Prompt-to-Scene
+# Hermes Repo Auditor
 
-> Turn any text prompt, image, or audio track into a real-time generative visual scene — powered by AI.
+> **Autonomous code review by AI agents.**  
+> Point it at any public GitHub repo. It reads the codebase, analyzes architecture, scores code quality, checks for security issues, and generates a beautiful audit report — entirely autonomously.
 
-**Hackathon submission · Due May 3, 2026**
+**🏆 Hermes Creative Hackathon Submission · Due May 3, 2026**  
+**🎯 Kimi K2.5 Track ($5k bonus) — powered by NVIDIA NIM**
+
+[![Self Audit](http://localhost:7041/api/audit/badge?repo=coe0718/hackathon-creative)](http://localhost:7041/?repo=coe0718/hackathon-creative)
+
+---
 
 ## What It Does
 
-Prompt-to-Scene takes a natural language description (or an image, or an audio file) and generates a real-time, interactive visual scene with synchronized audio. It's a creative tool that bridges AI understanding with generative art.
+Hermes Repo Auditor runs a **3-pass LLM analysis** on any public GitHub repository:
 
-### Three Input Paths
+| Pass | What Happens | Time |
+|------|-------------|------|
+| **1. Structural Analysis** | Reads README, config files, directory tree → maps architecture, framework, language, build system | ~10s |
+| **2. Deep Code Review** | Source files chunked and analyzed for code quality, security, maintainability — one file at a time | ~15-60s |
+| **3. Aggregation** | All findings merged into final scores, prioritized recommendations, risks, and verdict | ~10s |
 
-| Path | Input | What Happens |
-|------|-------|-------------|
-| **Text → Scene** | Describe your scene in words | Director agent (LLM) generates a scene spec → p5.js / ASCII renderer |
-| **Image → Scene** | Drop any image | Vision model (LLaMA 3.2 90B) analyzes colors, mood, style → generates matching scene |
-| **Audio → Scene** | Drop an MP3/WAV | Beat detection + audio features → synced visual scene |
+**Uses Kimi K2.5** (moonshotai/kimi-k2.5) via NVIDIA NIM — a reasoning model that provides detailed, contextual analysis. Live SSE streaming shows Kimi's progress in real time.
 
-### Output Formats
+### Sample Repo Scores
 
-- **p5.js Visual** — 8 styles (geometric, particles, waveform, glitch, minimal, retro, organic, ASCII), 6 effects (scanlines, noise, bloom, chromatic aberration, vignette, drift), beat-synced animation
-- **ASCII Engine** — 6 ASCII styles, 6 color themes, pure vanilla JS
-- **Procedural Audio** — Web Audio API synth with BPM-synced visualization
-- **Stitched Final** — Audio + visuals combined in one view
+<!-- Famous repo results load dynamically — these are populated by the background seeder -->
+Click any to audit it yourself.
 
-## Architecture
+[Audit expressjs/express](http://localhost:7041/?repo=expressjs/express) · [Audit facebook/react](http://localhost:7041/?repo=facebook/react) · [Audit vuejs/core](http://localhost:7041/?repo=vuejs/core) · [Audit coe0718/hackathon-creative (self-audit)](http://localhost:7041/?repo=coe0718/hackathon-creative)
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│  Input       │────▶│  Director     │────▶│  Generators       │
-│  (text/img/  │     │  Agent (LLM)  │     │  (p5.js/ASCII/    │
-│   audio)     │     │  → Scene Spec │     │   audio/stitcher) │
-└─────────────┘     └──────────────┘     └──────────────────┘
-```
-
-**Director Agent** — Takes a prompt + optional image attributes → outputs a structured scene spec (JSON) with mood, tempo, palette, visual style, effects, sections, and timing.
-
-**Vision Module** — Sends uploaded images to LLaMA 3.2 90B Vision (via NVIDIA NIMs) → extracts mood, color palette, visual style, effects, tempo, and genre.
-
-**Generators** — Each takes a scene spec and produces a self-contained HTML file with real-time visuals.
-
-## Tech Stack
-
-| Layer | Tech |
-|-------|------|
-| Server | Node.js (zero npm deps — built-in `http` module) |
-| LLM (default) | MiniMax M2.5 via OpenRouter |
-| LLM (alt) | Kimi K2.5 via NVIDIA NIMs |
-| Vision | LLaMA 3.2 90B Vision Instruct via NVIDIA NIMs |
-| Visuals | p5.js 1.9.4 |
-| Audio | Web Audio API (procedural synth) |
-| ASCII | Pure vanilla JS (no deps) |
-| AIFF detection | onset detection via Web Audio analyser node |
-| Containerization | Docker + docker-compose |
-
-## Judge Demo
-
-**One-click auto-demo** (no interaction needed):
-```
-http://localhost:7041/?demo=1
-```
-This automatically generates a random scene with p5.js visuals, procedural audio, and a stitched final output.
-
-| URL | What it does |
-|-----|-------------|
-| `/?demo=1` or `/?demo=full` | Full auto-demo: preset → p5js → audio → stitcher |
-| `/?demo=quick` | Quick: just picks a preset and renders p5js |
-| `/#demo` | Same as `?demo=1` |
+---
 
 ## Quick Start
 
 ```bash
 # Clone
-git clone <repo-url> && cd prompt-to-scene
+git clone https://github.com/coe0718/hackathon-creative && cd hackathon-creative
 
 # Set up API keys
 cp .env.example .env
-# Edit .env — add your NVIDIA_API_KEY and/or OPENROUTER_API_KEY
+# Edit .env — add your NVIDIA_API_KEY (required for Kimi K2.5)
+# Also set GITHUB_TOKEN to enable PR publishing
 
-# Start (no npm install needed)
+# Start (no npm install needed — zero dependencies)
 node server.js
-
-# Or via Docker
-docker compose up
 
 # Open
 open http://localhost:7041
 ```
 
-## API Endpoints
+### Docker
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Demo UI |
-| `GET` | `/landing` | Marketing page |
-| `GET` | `/health` | Health check (`{"status":"ok"}`) |
-| `POST` | `/api/generate` | Text prompt → Director → scene spec |
-| `POST` | `/api/generate-from-image` | Image data URL → Vision → scene spec |
-| `POST` | `/api/generate/p5js` | Scene spec → p5.js HTML |
-| `POST` | `/api/generate/ascii` | Scene spec → basic ASCII HTML |
-| `POST` | `/api/generate/ascii-enhanced` | Scene spec → 4-layer ASCII HTML |
-| `POST` | `/api/generate/procedural-audio` | Scene spec → procedural audio HTML |
-| `POST` | `/api/generate/stitch` | Scene spec → stitched A/V HTML |
-| `POST` | `/api/batch` | Batch generate multiple prompts |
+```bash
+docker compose up
+open http://localhost:7041
+```
+
+---
 
 ## Features
 
-- **20 built-in presets** — instant generation without API calls
-- **3 AI backends** — MiniMax M2.5, Kimi K2.5, preset fallback
-- **Image-to-Scene** — drag & drop any image, AI extracts visual attributes
-- **Audio-to-Scene** — drop MP3/WAV, auto-visualizes with beat sync
-- **Scene History** — localStorage persistence of full specs (30 entries), restore any past scene
-- **Dark/Light Theme** — toggle with one click, preference persisted
-- **Batch Generation** — generate multiple scenes from a list of prompts
-- **Share URL** — encode scene spec in URL hash for sharing
-- **Embed Code** — copy embeddable iframe code for any scene
-- **Side-by-Side 4-Up** — compare 4 visual styles simultaneously
-- **Download** — export any output as self-contained HTML
-- **Demo Recording** — record 10s WebM video of any scene
-- **Keyboard Controls** — 1-8 switch style, P pause, S screenshot, R reset
+### 🔍 Repo Auditor (Primary)
 
-## Scene Spec Format
+| Feature | Description |
+|---------|-------------|
+| **3-Pass LLM Analysis** | Structural → Deep → Aggregation pipeline |
+| **5-Axis Scoring** | Architecture, Code Quality, Security, Documentation, Maintainability (0-100) |
+| **Radar Chart** | SVG pentagon visualization in every report |
+| **Live SSE Streaming** | Watch Kimi's reasoning steps in real time |
+| **Prioritized Findings** | CRITICAL / WARNING / INFO with file locations and fix suggestions |
+| **Auto-Fix PR Generation** | Generate pull requests addressing critical findings |
+| **Download Report** | Standalone HTML file, all CSS inlined, no server needed |
+| **Print / Save as PDF** | Opens report in new window with print dialog |
+| **SVG Badge** | `[![Hermes Audit](/api/audit/badge?repo=user/repo)](...)` — paste in any README |
+| **Share Links** | Add `?repo=user/repo` to URL — shareable, auto-loads and runs |
+| **Scan History** | Persisted to disk, survives restarts, shows ↑↓→ trend arrows |
+| **Famous Repo Showcase** | Background-seeded scores for Express, React, Vue, Jest |
+| **Self-Audit** | Click "🔍 self-audit" — the auditor audits its own codebase |
+| **File Count Selector** | Choose 10/25/50/100 files for depth vs. speed control |
+| **One-Click Re-audit** | Click any history entry to re-run |
 
-```json
-{
-  "scene": {
-    "name": "neon-rain",
-    "mood": "energetic",
-    "tempo": 85,
-    "duration_seconds": 45
-  },
-  "visual": {
-    "style": "geometric",
-    "palette": ["#c084fc", "#60a5fa", "#f472b6"],
-    "effects": ["bloom", "scanlines"],
-    "intensity": 0.7,
-    "resolution": { "width": 1920, "height": 1080 }
-  },
-  "timing": {
-    "beat_interval_ms": 705,
-    "sections": [
-      { "name": "intro", "start": 0, "end": 8 },
-      { "name": "drop", "start": 8, "end": 32 },
-      { "name": "outro", "start": 32, "end": 45 }
-    ]
-  },
-  "audio": {
-    "genre": "electronic",
-    "key": "C minor",
-    "layers": ["pad", "bass", "lead"]
-  },
-  "prompt": "A cyberpunk cityscape at night with rain and neon lights"
-}
+### 🎨 Prompt-to-Scene (Creative Tool)
+
+Originally built as a creative tool — still available at `/creative`:
+- Text, Image, and Audio → generative visual scenes
+- p5.js (8 styles, 6 effects), ASCII art (6 styles), procedural audio
+- 20 built-in presets (no API key required)
+- Standalone HTML export
+
+---
+
+## Badge
+
+Add this badge to your project's README after running an audit:
+
 ```
+[![Hermes Audit](https://your-server.com/api/audit/badge?repo=user/repo)](https://your-server.com/?repo=user/repo)
+```
+
+The badge shows the overall score (color-coded) and links back to the full report.
+
+---
+
+## API Endpoints
+
+### Repo Auditor
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` or `/audit` | Repo Auditor UI |
+| `POST` | `/api/audit` | Run a full audit `{ repo: "user/repo", maxFiles: 10 }` (SSE stream) |
+| `GET` | `/api/audit/history` | Scan history (JSON array) |
+| `GET` | `/api/audit/famous` | Famous repo cached results |
+| `GET` | `/api/audit/badge?repo=user/repo` | SVG score badge |
+| `POST` | `/api/audit/pr` | Generate fix PR plan from cached audit |
+| `POST` | `/api/audit/pr/publish` | Publish PR to GitHub (needs GITHUB_TOKEN) |
+
+### Creative Tool
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/creative` | Creative tool UI |
+| `GET` | `/landing` | Marketing page |
+| `POST` | `/api/generate` | Text prompt → Director → scene spec |
+| `POST` | `/api/generate-from-image` | Image → Vision → scene spec |
+| `POST` | `/api/generate/p5js` | Scene spec → p5.js HTML |
+| `POST` | `/api/generate/ascii` | Scene spec → ASCII HTML |
+| `POST` | `/api/generate/ascii-enhanced` | Scene spec → 4-layer ASCII |
+| `POST` | `/api/generate/procedural-audio` | Scene spec → audio HTML |
+| `POST` | `/api/generate/stitch` | Scene spec → stitched A/V HTML |
+| `POST` | `/api/export` | Download standalone HTML |
+
+---
+
+## Tech Stack
+
+| Layer | Tech |
+|-------|------|
+| **Server** | Node.js (zero npm deps) |
+| **LLM** | Kimi K2.5 (moonshotai/kimi-k2.5) via NVIDIA NIM |
+| **Fallback** | MiniMax M2.5 via OpenRouter |
+| **Frontend** | Pure HTML/CSS/JS (no build step) |
+| **Visuals** | p5.js 1.9.4 (creative tool) |
+| **Audio** | Web Audio API (procedural synthesis) |
+| **Containers** | Docker + docker-compose |
+
+---
+
+## Built By Agents
+
+Every line of code in this project was written by autonomous AI agents working collaboratively:
+
+| Agent | Role | Contributions |
+|-------|------|---------------|
+| **Drey** | Coding Specialist | Server, generators, UI, export, vision pipeline, auditor, badge, radar chart, persistence |
+| **Vex** | Code Reviewer | 3 critical + 10 warning bugs caught, architecture review, modular refactoring |
+| **Tuck** | Product Manager | Features ideas, UX direction, demo strategy, prioritization |
+
+**Zero human-written code.** A human gave direction. The agents built everything.
+
+---
+
+## Demo Video
+
+[Watch the demo →](https://your-demo-video-url.com)
+
+*(60-90s screen recording showing: entering a repo → SSE progress → completed report → radar chart → badge → history)*
+
+---
 
 ## Project Structure
 
 ```
-├── server.js              # Node.js server (zero deps)
-├── presets.js             # 20 built-in scene presets
-├── .env                   # API keys (not committed)
-├── .env.example           # Template
+├── server.js                  # Main HTTP server (zero deps)
+├── modules/
+│   ├── repo-fetcher.js        # GitHub API file fetching
+│   ├── repo-auditor.js        # 3-pass LLM analysis pipeline
+│   └── report-generator.js    # Beautiful HTML report + radar chart
+├── ui/
+│   ├── auditor.html           # Repo Auditor UI (all-in-one)
+│   ├── landing.html           # Marketing page
+│   └── index.html             # Creative tool UI
+├── data/                      # Persisted scan history + famous repo cache
+├── director/                  # Director agent (creative tool)
+├── generators/                # p5.js, ASCII, audio generators
+├── sync/                      # A/V stitcher
+├── .env.example               # API key template
 ├── Dockerfile
-├── docker-compose.yml
-├── director/
-│   ├── agent.js           # LLM client (OpenRouter + NVIDIA)
-│   ├── spec.md            # Scene spec JSON schema (v1.0 LOCKED)
-│   └── vision.js          # Image analysis via NVIDIA NIMs VLM
-├── generators/
-│   ├── p5js-scene.js      # p5.js generator (8 styles, 6 effects)
-│   └── ascii-engine.js    # ASCII art generator (6 styles, 6 themes)
-├── sync/
-│   └── stitcher.js        # A/V sync + procedural audio + Web Audio
-└── ui/
-    ├── index.html         # Demo UI (all-in-one, zero build step)
-    └── landing.html       # Marketing page
+└── docker-compose.yml
 ```
+
+---
 
 ## License
 
@@ -182,4 +198,5 @@ MIT
 
 ---
 
-🤖 **Built entirely by hermes-agent** — autonomous AI coding assistant
+> 🤖 **Built by Hermes Agent** — autonomous AI coding assistant  
+> https://github.com/coe0718/hackathon-creative
