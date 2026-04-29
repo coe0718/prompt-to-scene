@@ -64,6 +64,43 @@ const auditCache = new Map();
 
 // ─── Scan history (for history widget) ──────────────────────────────────────
 const scanHistory = [];
+const DATA_DIR = path.join(__dirname, 'data');
+const HISTORY_FILE = path.join(DATA_DIR, 'scan-history.json');
+
+// Load persisted history
+try {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (fs.existsSync(HISTORY_FILE)) {
+    const loaded = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    if (Array.isArray(loaded)) scanHistory.push(...loaded);
+    console.log(`✓ Loaded ${scanHistory.length} scan history entries`);
+  }
+} catch(e) { console.warn('Could not load scan history:', e.message); }
+
+function saveHistory() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(scanHistory), 'utf8');
+  } catch(e) { /* silent */ }
+}
+
+// ─── Famous repos cache ────────────────────────────────────────────────────
+const FAMOUS_REPOS = [
+  'expressjs/express',
+  'facebook/react',
+  'vuejs/core',
+  'facebook/jest',
+];
+const FAMOUS_FILE = path.join(DATA_DIR, 'famous-repos.json');
+let famousResults = [];
+
+// Load cached famous repo results
+try {
+  if (fs.existsSync(FAMOUS_FILE)) {
+    famousResults = JSON.parse(fs.readFileSync(FAMOUS_FILE, 'utf8'));
+    console.log(`✓ Loaded ${famousResults.length} famous repo results`);
+  }
+} catch(e) { console.warn('Could not load famous repos:', e.message); }
 
 // ─── Require project modules ───────────────────────────────────────────────
 
@@ -372,6 +409,12 @@ if (url.pathname === '/api/audit/pr/publish' && method === 'POST') {
 }
 if (url.pathname === '/api/audit/history' && method === 'GET') {
   return jsonResponse(res, 200, scanHistory);
+}
+if (url.pathname === '/api/audit/badge' && method === 'GET') {
+  return handleBadge(req, res, url);
+}
+if (url.pathname === '/api/audit/famous' && method === 'GET') {
+  return jsonResponse(res, 200, famousResults);
 }
 
 // ── Landing page ───────────────────────────────────────────────────────────
@@ -732,18 +775,28 @@ async function handleAudit(req, res) {
     // Cache audit result for PR generation
     auditCache.set(repoUrl, { result, repoUrl, timestamp: Date.now() });
     
-    // Push to scan history
+    // Push to scan history with trend tracking
+    var prevEntry = scanHistory.find(function(h) { return h.repo === repoUrl; });
+    var prevScore = prevEntry ? prevEntry.overall : null;
+    var trend = 'new';
+    if (prevScore !== null) {
+      var diff = (result.scores?.overall || 0) - prevScore;
+      trend = diff > 2 ? 'up' : (diff < -2 ? 'down' : 'same');
+    }
     scanHistory.unshift({
       repo: repoUrl,
       full_name: repoData.metadata.full_name,
       language: repoData.metadata.language,
       stars: repoData.metadata.stars,
       overall: result.scores?.overall || 0,
+      prev_overall: prevScore,
+      trend: trend,
       findings: result.statistics?.findings_count || 0,
       critical: result.statistics?.critical_count || 0,
       timestamp: Date.now(),
     });
-    if (scanHistory.length > 20) scanHistory.length = 20;
+    if (scanHistory.length > 50) scanHistory.length = 50;
+    saveHistory();
 
     send('complete', { html: htmlReport });
     res.end();
@@ -754,6 +807,48 @@ async function handleAudit(req, res) {
       res.end();
     }
   }
+}
+
+// ─── Badge SVG Handler ──────────────────────────────────────────────────────
+
+function handleBadge(req, res, url) {
+  var repo = (url.searchParams.get('repo') || '').trim();
+  if (!repo) return jsonResponse(res, 400, { error: '?repo=user/repo required' });
+
+  // Look up in audit cache first, then scan history
+  var score;
+  var cached = auditCache.get(repo);
+  if (cached && cached.result && cached.result.scores) {
+    score = cached.result.scores.overall;
+  } else {
+    var histEntry = scanHistory.find(function(h) { return h.repo === repo; });
+    if (histEntry) score = histEntry.overall;
+  }
+  if (score === undefined) return jsonResponse(res, 404, { error: 'No audit found for ' + repo });
+
+  var color = score >= 85 ? '#4ade80' : score >= 65 ? '#fbbf24' : score >= 45 ? '#fb923c' : '#f87171';
+  var label = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F';
+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="32">'
+    + '<linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>'
+    + '<clipPath id="c"><rect width="200" height="32" rx="4" fill="#fff"/></clipPath>'
+    + '<g clip-path="url(#c)">'
+    + '<rect width="120" height="32" fill="#555"/>'
+    + '<rect x="120" width="80" height="32" fill="' + color + '"/>'
+    + '<rect width="200" height="32" fill="url(#b)"/>'
+    + '</g>'
+    + '<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="12">'
+    + '<text x="60" y="20">Audit</text>'
+    + '<text x="160" y="20" font-weight="bold">' + score + '</text>'
+    + '</g>'
+    + '</svg>';
+
+  res.writeHead(200, {
+    'Content-Type': 'image/svg+xml',
+    'Cache-Control': 'max-age=3600',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(svg);
 }
 
 // ─── PR Plan Generation Handler ──────────────────────────────────────────────
@@ -861,4 +956,46 @@ server.listen(PORT, () => {
   if (!vision) console.warn('⚠ Vision module NOT loaded');
   else console.log('✓ Vision module ready (llama-3.2-90b-vision-instruct)');
   console.log('');
+
+  // Seed famous repos in background if not cached
+  if (repoFetcher && repoAuditor && famousResults.length === 0) {
+    seedFamousRepos();
+  }
 });
+
+// ─── Famous Repo Seeder ─────────────────────────────────────────────────────
+
+function seedFamousRepos() {
+  console.log('Seeding famous repo audits in background...');
+  var queue = FAMOUS_REPOS.slice();
+  var results = [];
+
+  function processNext() {
+    if (queue.length === 0) {
+      famousResults = results;
+      try {
+        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+        fs.writeFileSync(FAMOUS_FILE, JSON.stringify(results), 'utf8');
+      } catch(e) {}
+      console.log('✓ Famous repo seeding complete (' + results.length + ' repos)');
+      return;
+    }
+    var repo = queue.shift();
+    console.log('  Seeding ' + repo + '...');
+    repoFetcher.fetchRepo(repo, { maxFiles: 10 }).then(function(repoData) {
+      return repoAuditor.analyzeRepo(repoData, function() {});
+    }).then(function(result) {
+      results.push({ repo: repo, full_name: result.metadata.full_name, language: result.metadata.language, stars: result.metadata.stars, scores: result.scores, findings_count: result.statistics?.findings_count || 0 });
+      // Also cache for badge
+      auditCache.set(repo, { result: result, repoUrl: repo, timestamp: Date.now() });
+      console.log('  ✓ ' + repo + ' — overall: ' + (result.scores?.overall || '?'));
+      setTimeout(processNext, 1000);
+    }).catch(function(e) {
+      console.warn('  ✗ ' + repo + ' failed: ' + e.message.slice(0, 100));
+      results.push({ repo: repo, full_name: repo, error: e.message.slice(0, 100) });
+      setTimeout(processNext, 1000);
+    });
+  }
+
+  processNext();
+}

@@ -486,24 +486,12 @@
 <section class="preview-section container">
   <div class="section-label">Sample Reports</div>
   <div class="section-title">Real scores from real repos</div>
-  <div class="preview-grid">
+  <div class="preview-grid" id="famous-grid">
     <div class="preview-card">
-      <div class="preview-score" style="color:var(--green)">94</div>
-      <div class="preview-label">Architecture</div>
+      <div class="preview-score" style="color:var(--muted);font-size:1rem;">Loading...</div>
+      <div class="preview-label">Famous repos being audited</div>
       <div class="preview-repo">expressjs/express</div>
-      <div class="preview-detail">⭐ 68K · JavaScript · Modular</div>
-    </div>
-    <div class="preview-card">
-      <div class="preview-score" style="color:var(--amber)">83</div>
-      <div class="preview-label">Code Quality</div>
-      <div class="preview-repo">prettier/prettier</div>
-      <div class="preview-detail">⭐ 50K · JavaScript · Opinionated</div>
-    </div>
-    <div class="preview-card">
-      <div class="preview-score" style="color:var(--amber)">80</div>
-      <div class="preview-label">Overall</div>
-      <div class="preview-repo">psf/black</div>
-      <div class="preview-detail">⭐ 40K · Python · Uncompromising</div>
+      <div class="preview-detail">Results will appear as audits complete</div>
     </div>
   </div>
 </section>
@@ -546,6 +534,7 @@
     <div id="result-toolbar" style="display:none;margin-top:12px;gap:8px;flex-wrap:wrap;" class="result-toolbar">
       <button class="btn btn-glass" onclick="downloadReport()" style="font-size:0.82rem;padding:8px 16px;">📄 Download HTML</button>
       <button class="btn btn-glass" onclick="printReport()" style="font-size:0.82rem;padding:8px 16px;">🖨️ Print / Save as PDF</button>
+      <button class="btn btn-glass" onclick="copyBadgeMarkdown()" style="font-size:0.82rem;padding:8px 16px;">🏷️ Copy Badge MD</button>
     </div>
 
     <!-- PR Generation Section -->
@@ -845,6 +834,22 @@ function printReport() {
   setTimeout(function() { w.print(); }, 500);
 }
 
+// ─── Copy Badge Markdown ──────────────────────────────────────────────────
+function copyBadgeMarkdown() {
+  if (!lastAuditedRepo) return;
+  var badgeUrl = window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(lastAuditedRepo);
+  var md = '[![Hermes Audit](' + badgeUrl + ')](' + window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(lastAuditedRepo) + ')';
+  navigator.clipboard.writeText(md).then(function() {
+    var el = document.getElementById('status');
+    el.innerHTML = '<span style="color:var(--green);">Badge markdown copied! Paste in your README.</span>';
+    setTimeout(function() {
+      if (el.innerHTML.indexOf('Badge markdown') !== -1) el.innerHTML = '';
+    }, 3000);
+  }).catch(function() {
+    prompt('Copy this badge markdown:', md);
+  });
+}
+
 // ─── Share link ───────────────────────────────────────────────────────────
 function copyShareLink() {
   var repo = document.getElementById('repo-input').value.trim();
@@ -881,10 +886,14 @@ async function refreshHistory() {
     list.innerHTML = history.map(function(h) {
       var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--red)';
       var badge = h.critical > 0 ? ' <span style="color:var(--red);font-size:0.7rem;">' + h.critical + '</span>' : '';
+      var trendIcon = h.trend === 'up' ? '↑' : h.trend === 'down' ? '↓' : h.trend === 'same' ? '→' : '';
+      var trendColor = h.trend === 'up' ? 'var(--green)' : h.trend === 'down' ? 'var(--red)' : 'var(--muted)';
       return '<div class="history-item" onclick="setRepo(\'' + escHtml(h.repo) + '\');runAudit();">' +
         '<div><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
         '<div style="font-size:0.72rem;color:var(--muted);">' + (h.language || '') + badge + '</div></div>' +
-        '<div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
+        '<div><div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
+        (trendIcon ? '<div style="font-size:0.7rem;color:' + trendColor + ';text-align:right;">' + trendIcon + '</div>' : '') +
+        '</div>' +
         '</div>';
     }).join('');
   } catch(e) {
@@ -1010,6 +1019,40 @@ async function publishPR() {
 document.getElementById('repo-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') runAudit();
 });
+
+// ─── Load famous repo results ─────────────────────────────────────────────
+function loadFamousRepos() {
+  fetch('/api/audit/famous').then(function(r) { return r.json(); }).then(function(data) {
+    if (!data || data.length === 0) return;
+    var grid = document.getElementById('famous-grid');
+    grid.innerHTML = data.map(function(r) {
+      if (r.error) return '';
+      var overall = r.scores ? r.scores.overall : 0;
+      var arch = r.scores ? (r.scores.architecture || '?') : '?';
+      var cq = r.scores ? (r.scores.code_quality || '?') : '?';
+      var sec = r.scores ? (r.scores.security || '?') : '?';
+      var scoreColor = overall >= 80 ? 'var(--green)' : overall >= 60 ? 'var(--amber)' : 'var(--red)';
+      var findingsBadge = r.findings_count ? r.findings_count + ' findings' : '';
+      return '<div class="preview-card" onclick="setRepo(\'' + escHtml(r.repo) + '\');runAudit();" style="cursor:pointer;">' +
+        '<div class="preview-score" style="color:' + scoreColor + '">' + overall + '</div>' +
+        '<div class="preview-label">Overall Score · Click to re-audit</div>' +
+        '<div class="preview-repo">' + escHtml(r.full_name || r.repo) + '</div>' +
+        '<div class="preview-detail">⚙' + arch + ' · ✓' + cq + ' · 🔒' + sec +
+        (findingsBadge ? ' · ' + findingsBadge : '') +
+        ' · ⭐' + (r.stars || '?') + '</div>' +
+        '</div>';
+    }).join('');
+    if (grid.innerHTML.trim() === '') {
+      grid.innerHTML = '<div class="preview-card"><div class="preview-score" style="color:var(--muted);font-size:1rem;">⏳</div><div class="preview-label">Audits in progress</div><div class="preview-repo">Background analysis running...</div><div class="preview-detail">Results appear as each repo completes</div></div>';
+    }
+  }).catch(function() { /* silent */ });
+}
+
+loadFamousRepos();
+
+setInterval(function() {
+  loadFamousRepos();
+}, 30000); // Refresh famous repos every 30s
 </script>
 </body>
 </html>
