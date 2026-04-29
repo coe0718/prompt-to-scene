@@ -49,6 +49,7 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
   if (!config) throw new Error('Unknown model: ' + model);
   const key = config.key();
   if (!key && (model === 'kimi' || model === 'fast')) throw new Error('NVIDIA_API_KEY not set');
+  if (!key && model === 'minimax') throw new Error('OPENROUTER_API_KEY not set');
 
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
@@ -75,10 +76,13 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
         }
         try {
           const parsed = JSON.parse(data);
+          if (!parsed?.choices?.length || !parsed.choices[0]?.message) {
+            return reject(new Error('Invalid LLM response structure'));
+          }
           const msg = parsed.choices[0].message;
           resolve(msg.content || msg.reasoning_content || '');
         } catch(e) {
-          reject(new Error('Failed to parse LLM response'));
+          reject(new Error('Failed to parse LLM response: ' + e.message));
         }
       });
     });

@@ -313,6 +313,30 @@
   @media (max-width: 860px) {
     .demo-row { flex-direction: column; align-items: stretch; }
     .sidebar-right { display: none !important; }
+    .demo-options { width: 100%; }
+    .input-group { flex-direction: column; gap: 8px; }
+    .input-group input { width: 100%; }
+    .input-group .btn { width: 100%; justify-content: center; }
+    .examples { justify-content: center; }
+    .file-chips { flex-wrap: wrap; justify-content: center; }
+    .audit-options { flex-direction: column; align-items: center; text-align: center; }
+    .progress-steps { flex-wrap: wrap; gap: 10px; }
+    nav .links { gap: 12px; }
+    nav .links a { font-size: 0.78rem; }
+    .preview-grid { grid-template-columns: 1fr; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .tech-grid { justify-content: center; }
+    .cta-group { flex-direction: column; align-items: center; }
+  }
+  @media (max-width: 480px) {
+    .container { padding: 0 12px; }
+    .header { padding: 28px 0 20px; }
+    .header h1 { font-size: 1.4rem; }
+    nav { flex-direction: column; gap: 10px; }
+    nav .links { flex-wrap: wrap; justify-content: center; }
+    .section-title { font-size: 1.3rem; }
+    .preview-card { padding: 16px; }
+    .preview-score { font-size: 2rem; }
   }
 
   .spinner {

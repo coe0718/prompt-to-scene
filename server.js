@@ -751,6 +751,11 @@ async function handleAudit(req, res) {
     return jsonResponse(res, 400, { error: 'Missing repo URL. Send { repo: \"user/repo\" }' });
   }
 
+  // Sanitize and validate
+  var maxFiles = parseInt(body.maxFiles, 10);
+  if (isNaN(maxFiles) || maxFiles < 1) maxFiles = 10;
+  if (maxFiles > 9999) maxFiles = 9999;
+
   if (!repoFetcher || !repoAuditor || !reportGen) {
     return jsonResponse(res, 500, { error: 'Auditor modules not loaded' });
   }
@@ -784,7 +789,7 @@ async function handleAudit(req, res) {
   try {
     send('progress', { step: 'fetch', message: 'Fetching repo from GitHub...' });
     console.log(`Audit: Fetching ${repoUrl}...`);
-    const repoData = await repoFetcher.fetchRepo(repoUrl, { maxFiles: body.maxFiles || 10 });
+    const repoData = await repoFetcher.fetchRepo(repoUrl, { maxFiles: maxFiles });
     console.log(`Audit: Analyzing ${repoData.metadata.full_name} (${repoData.files.length} files)...`);
 
     send('progress', { step: 'structural', message: `Kimi analyzing ${repoData.metadata.full_name}...` });
