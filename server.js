@@ -292,7 +292,7 @@ async function handleExport(req, res) {
 
     // Add export metadata badge
     const sceneName = (spec.scene && spec.scene.name) || 'scene';
-    const exportBadge = `<!--\n  ═══ Prompt-to-Scene · Standalone Export ═══\n  Scene: ${sceneName}\n  Generator: ${generator}\n  Generated: ${new Date().toISOString()}\n  Built by Hermes Agent (hermes-agent.vercel.app)\n  → https://github.com/coe0718/hackathon-creative\n  ═══════════════════════════════════════════════\n-->\n`;
+    const exportBadge = `<!--\n  ═══ Prompt-to-Scene · Standalone Export ═══\n  Scene: ${sceneName}\n  Generator: ${generator}\n  Generated: ${new Date().toISOString()}\n  Built by Archiview (autonomous AI agents)\n  → https://github.com/coe0718/hackathon-creative\n  ═══════════════════════════════════════════════\n-->\n`;
     html = exportBadge + html;
 
     // Return as downloadable file

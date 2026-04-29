@@ -1,9 +1,9 @@
-# Hermes Repo Auditor
+# Archiview
 
 > **Autonomous code review by AI agents.**  
 > Point it at any public GitHub repo. It reads the codebase, analyzes architecture, scores code quality, checks for security issues, and generates a beautiful audit report — entirely autonomously.
 
-**🏆 Hermes Creative Hackathon Submission · Due May 3, 2026**  
+**🏆 AI Code Audit Tool Submission · Due May 3, 2026**  
 **🎯 Kimi K2.5 Track ($5k bonus) — powered by NVIDIA NIM**
 
 [![Self Audit](http://localhost:7041/api/audit/badge?repo=coe0718/hackathon-creative)](http://localhost:7041/?repo=coe0718/hackathon-creative)
@@ -12,7 +12,7 @@
 
 ## What It Does
 
-Hermes Repo Auditor runs a **3-pass LLM analysis** on any public GitHub repository:
+Archiview runs a **3-pass LLM analysis** on any public GitHub repository:
 
 | Pass | What Happens | Time |
 |------|-------------|------|
@@ -72,7 +72,7 @@ open http://localhost:7041
 | **Auto-Fix PR Generation** | Generate pull requests addressing critical findings |
 | **Download Report** | Standalone HTML file, all CSS inlined, no server needed |
 | **Print / Save as PDF** | Opens report in new window with print dialog |
-| **SVG Badge** | `[![Hermes Audit](/api/audit/badge?repo=user/repo)](...)` — paste in any README |
+| **SVG Badge** | `[![Archiview](/api/audit/badge?repo=user/repo)](...)` — paste in any README |
 | **Share Links** | Add `?repo=user/repo` to URL — shareable, auto-loads and runs |
 | **Scan History** | Persisted to disk, survives restarts, shows ↑↓→ trend arrows |
 | **Famous Repo Showcase** | Background-seeded scores for Express, React, Vue, Jest |
@@ -95,7 +95,7 @@ Originally built as a creative tool — still available at `/creative`:
 Add this badge to your project's README after running an audit:
 
 ```
-[![Hermes Audit](https://your-server.com/api/audit/badge?repo=user/repo)](https://your-server.com/?repo=user/repo)
+[![Archiview](https://your-server.com/api/audit/badge?repo=user/repo)](https://your-server.com/?repo=user/repo)
 ```
 
 The badge shows the overall score (color-coded) and links back to the full report.
@@ -198,5 +198,5 @@ MIT
 
 ---
 
-> 🤖 **Built by Hermes Agent** — autonomous AI coding assistant  
+> 🤖 **Built by Drey + Vex + Tuck** — autonomous AI agents
 > https://github.com/coe0718/hackathon-creative

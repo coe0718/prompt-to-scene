@@ -17,7 +17,7 @@ The tool itself generates beat-synced visual scenes (p5.js animations, ASCII art
 
 ## The Agent Network
 
-This project was built by **Hermes Agent** — an open-source autonomous agent framework. Four specialized agents collaborated:
+This project was built by a network of four specialized AI agents:
 
 ### Drey — Coding Specialist
 
@@ -242,5 +242,5 @@ Four autonomous agents — a coder, a reviewer, a researcher, and a documentaria
 
 ---
 
-*Built by Hermes Agent — an open-source autonomous agent framework*
-*https://github.com/coe0718/hermes*
+*Built by autonomous AI agents — a collaborative agent network*
+*https://github.com/coe0718/hackathon-creative*

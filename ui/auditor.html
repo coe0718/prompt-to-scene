@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hermes Repo Auditor — Autonomous Code Review by AI Agents</title>
-<meta name="description" content="Point Hermes Agent at any GitHub repo. It reads the codebase, analyzes architecture, checks security, and generates a beautiful audit report. Built entirely by autonomous AI agents.">
+<title>Archiview — Autonomous Code Review by AI Agents</title>
+<meta name="description" content="Point Archiview at any GitHub repo. It reads the codebase, analyzes architecture, checks security, and generates a beautiful audit report. Built entirely by autonomous AI agents.">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -438,9 +438,9 @@
 
 <!-- Hero -->
 <section class="hero container">
-  <div class="badge"><span class="badge-dot"></span> Built by Hermes Agent · Autonomous AI</div>
+  <div class="badge"><span class="badge-dot"></span> Built by Autonomous AI Agents</div>
   <h1>Your codebase.<br><span class="gradient">Audited by AI.</span></h1>
-  <p>Point Hermes at any GitHub repository. It reads the architecture, scores code quality, finds security issues, and generates a beautiful audit report — all autonomously.</p>
+  <p>Point Archiview at any GitHub repository. It reads the architecture, scores code quality, finds security issues, and generates a beautiful audit report — all autonomously.</p>
   <div class="cta-group">
     <a href="#try" class="btn btn-primary">Audit a Repo →</a>
     <a href="#how" class="btn btn-glass">How it works</a>
@@ -467,7 +467,7 @@
     <div class="step">
       <div class="step-num">1</div>
       <h3>Structural Analysis</h3>
-      <p>Hermes reads the README, config files, and directory tree to understand architecture, framework, language, and build system.</p>
+      <p>Archiview reads the README, config files, and directory tree to understand architecture, framework, language, and build system.</p>
     </div>
     <div class="step">
       <div class="step-num">2</div>
@@ -581,12 +581,12 @@
 <!-- Features -->
 <section class="features container" id="features">
   <div class="section-label">Capabilities</div>
-  <div class="section-title">What Hermes looks for</div>
+  <div class="section-title">What Archiview looks for</div>
   <div class="feature-grid">
     <div class="feature-card">
       <div class="feature-icon" style="background:rgba(124,92,252,0.12)">🏗️</div>
       <h3>Architecture Analysis</h3>
-      <p>Framework detection, directory structure, design patterns, entry points, data flow — Hermes maps the entire codebase topology.</p>
+      <p>Framework detection, directory structure, design patterns, entry points, data flow — Archiview maps the entire codebase topology.</p>
     </div>
     <div class="feature-card">
       <div class="feature-icon" style="background:rgba(74,222,128,0.1)">✅</div>
@@ -611,7 +611,7 @@
     <div class="feature-card">
       <div class="feature-icon" style="background:rgba(244,114,182,0.1)">🔄</div>
       <h3>PR Generation</h3>
-      <p>Critical findings can be turned into pull requests automatically. Hermes writes the code, you review and merge.</p>
+      <p>Critical findings can be turned into pull requests automatically. Archiview writes the code, you review and merge.</p>
     </div>
   </div>
 </section>
@@ -620,7 +620,7 @@
 <section class="tech container">
   <div class="section-label">Powered By</div>
   <div class="tech-grid">
-    <span class="tech-chip active">Hermes Agent</span>
+    <span class="tech-chip active">Archiview</span>
     <span class="tech-chip active">Kimi K2.5 (NVIDIA NIM)</span>
     <span class="tech-chip active">GitHub API</span>
     <span class="tech-chip">Node.js</span>
@@ -639,7 +639,7 @@
 </section>
 
 <footer class="container">
-  <strong>Hermes Repo Auditor</strong> — Built for the Hermes Creative Hackathon<br>
+  <strong>Archiview</strong> — AI-powered code audit by autonomous agents<br>
   <span style="opacity:0.4;margin-top:6px;display:inline-block;">
   Conceived, designed, coded, and reviewed by Drey + Vex + Tuck · Zero human-written code
   </span>
@@ -858,7 +858,7 @@ function printReport() {
 function copyBadgeMarkdown() {
   if (!lastAuditedRepo) return;
   var badgeUrl = window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(lastAuditedRepo);
-  var md = '[![Hermes Audit](' + badgeUrl + ')](' + window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(lastAuditedRepo) + ')';
+  var md = '[![Archiview](' + badgeUrl + ')](' + window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(lastAuditedRepo) + ')';
   navigator.clipboard.writeText(md).then(function() {
     var el = document.getElementById('status');
     el.innerHTML = '<span style="color:var(--green);">Badge markdown copied! Paste in your README.</span>';
@@ -924,7 +924,7 @@ function shareOnX() {
   var repo = lastAuditedRepo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
   var badgeUrl = encodeURIComponent(window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(repo));
   var appUrl = encodeURIComponent(window.location.origin + '/?repo=' + encodeURIComponent(repo));
-  var text = encodeURIComponent('My codebase scored 65/100 on @HermesAgent\'s autonomous audit! How does yours stack up? 🏷️');
+  var text = encodeURIComponent('My codebase scored 65/100 on Archiview\'s autonomous audit! How does yours stack up? 🏷️');
   window.open('https://twitter.com/intent/tweet?text=' + text + '&url=' + appUrl, '_blank', 'width=600,height=400');
 }
 

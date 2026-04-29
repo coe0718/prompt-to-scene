@@ -1,5 +1,5 @@
 /**
- * Repo Fetcher — GitHub API module for Hermes Repo Auditor
+ * Repo Fetcher — GitHub API module for Archiview
  *
  * Fetches repo metadata, directory tree, and key file contents
  * via the GitHub REST API. No authentication needed for public repos.
@@ -45,7 +45,7 @@ function githubFetch(path) {
   return new Promise((resolve, reject) => {
     const url = GITHUB_API + path;
     const headers = {
-      'User-Agent': 'Hermes-Repo-Auditor/1.0',
+      'User-Agent': 'Archiview/1.0',
       'Accept': 'application/vnd.github.v3+json',
     };
     const token = process.env.GITHUB_TOKEN;

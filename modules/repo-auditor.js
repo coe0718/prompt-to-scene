@@ -21,7 +21,7 @@ const LLM_ENDPOINTS = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`,
       'HTTP-Referer': 'https://repo-audit.local',
-      'X-Title': 'Hermes Repo Auditor',
+      'X-Title': 'Archiview',
     }),
   },
   kimi: {
@@ -484,7 +484,7 @@ function githubRequest(path, method = 'GET', body = null) {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github+json',
-        'User-Agent': 'Hermes-Repo-Auditor/1.0',
+        'User-Agent': 'Archiview/1.0',
       },
     };
 
