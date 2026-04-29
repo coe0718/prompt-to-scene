@@ -818,12 +818,20 @@ function printReport() {
 // ─── Share link ───────────────────────────────────────────────────────────
 function copyShareLink() {
   var repo = document.getElementById('repo-input').value.trim();
+  if (!repo) {
+    navigator.clipboard.writeText(window.location.href.split('?')[0]).catch(function() {
+      prompt('Copy this link:', window.location.href.split('?')[0]);
+    });
+    return;
+  }
   var clean = repo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
   var url = window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(clean || '');
   navigator.clipboard.writeText(url).then(function() {
-    var status = document.getElementById('status');
-    status.innerHTML = '<span style="color:var(--green);">Share link copied!</span>';
-    setTimeout(function() { status.innerHTML = ''; }, 2000);
+    var el = document.getElementById('status');
+    el.innerHTML = '<span style="color:var(--green);">Share link copied!</span>';
+    setTimeout(function() {
+      if (el.innerHTML.indexOf('Share link') !== -1) el.innerHTML = '';
+    }, 2000);
   }).catch(function() {
     prompt('Copy this link:', url);
   });
