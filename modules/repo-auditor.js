@@ -35,7 +35,7 @@ const LLM_ENDPOINTS = {
   },
   fast: {
     url: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    model: 'meta/llama-3.2-3b-instruct',
+    model: 'minimaxai/minimax-m2.7',
     key: () => process.env.NVIDIA_API_KEY || '',
     headers: (key) => ({
       'Content-Type': 'application/json',
@@ -75,7 +75,8 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
         }
         try {
           const parsed = JSON.parse(data);
-          resolve(parsed.choices[0].message.content);
+          const msg = parsed.choices[0].message;
+          resolve(msg.content || msg.reasoning_content || '');
         } catch(e) {
           reject(new Error('Failed to parse LLM response'));
         }
