@@ -146,7 +146,7 @@ Rules:
 - WARNING = bugs, bad practices, significant code smells
 - INFO = style issues, documentation gaps, minor improvements
 - If the batch has no issues, output {"findings": [], "scores": {"code_quality": 85, "security": 85, "maintainability": 80, "overall": 83}, "summary": "Clean code, no significant issues found."}
-- Score honestly. 70 is average open-source quality. 90+ is exceptional.`;
+- Score across the full 0-100 range. 50 is average. 80+ is good. Use the full range to differentiate repos based on actual quality.`;
 
 const AGGREGATION_SYSTEM = `You are a senior engineering director writing a final audit report. You have received structural analysis and deep analysis results for a codebase. Aggregate them into a final report.
 
@@ -305,23 +305,51 @@ async function analyzeRepo(repoData, onProgress) {
   // Average scores across all chunks
   const avgScore = (key) => {
     const vals = deepResults.filter(r => r.scores && r.scores[key] !== undefined).map(r => r.scores[key]);
-    if (vals.length === 0) return 70;
+    if (vals.length === 0) return 50;
     return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
   };
 
+  // Structural signals for differentiation
+  const signals = structuralResult.code_quality_signals || {};
+  const hasTests = signals.has_tests || false;
+  const hasCI = signals.has_ci || false;
+  const hasLinting = signals.has_linting || false;
+  const hasDocs = signals.has_documentation || !!repoData.files.find(f => f.path === 'README.md');
+  const stars = repoData.metadata.stars || 0;
+
+  // Count findings by severity for evidence-based scoring
+  const criticalCount = allFindings.filter(f => f.severity === 'CRITICAL').length;
+  const warningCount = allFindings.filter(f => f.severity === 'WARNING').length;
+
+  // Evidence-based architecture score (no random noise)
+  const archScore = Math.min(98, Math.round(
+    40                              // baseline
+    + (hasTests ? 12 : 0)           // tests = architectural maturity
+    + (hasCI ? 8 : 0)               // CI = process maturity
+    + (hasLinting ? 8 : 0)          // linting = code standards
+    + (hasDocs ? 7 : 0)             // docs = project organization
+    + Math.min(Math.round(stars / 100), 10)  // popular repos tend to have better arch
+    - (criticalCount * 3)           // critical findings hurt architecture score
+  ));
+
+  // Documentation score based on signals
+  const docScore = hasDocs
+    ? Math.min(92, Math.round(55 + Math.min(stars / 40, 15) + (hasCI ? 5 : 0) - (criticalCount * 2)))
+    : 30;
+
+  // Apply finding-based penalties to deep analysis scores
+  const penalty = criticalCount * 5 + warningCount * 1;
+  const codeQuality = Math.max(avgScore('code_quality') - penalty, 20);
+  const security = Math.max(avgScore('security') - (criticalCount * 8), 15);
+  const maintainability = Math.max(avgScore('maintainability') - (criticalCount * 3 + Math.round(warningCount * 0.5)), 20);
+
   const aggregatedScores = {
-    architecture: Math.round((structuralResult.code_quality_signals?.has_documentation ? 70 : 50) +
-      (repoData.files.length > 0 ? 15 : 0) + Math.random() * 10), // base from structural + signal
-    code_quality: avgScore('code_quality'),
-    security: avgScore('security'),
-    documentation: structuralResult.code_quality_signals?.has_documentation ? 72 : 35,
-    maintainability: avgScore('maintainability'),
-    overall: Math.round((
-      (structuralResult.code_quality_signals?.has_documentation ? 72 : 50) +
-      avgScore('code_quality') +
-      avgScore('security') +
-      avgScore('maintainability')
-    ) / 4),
+    architecture: archScore,
+    code_quality: codeQuality,
+    security: security,
+    documentation: docScore,
+    maintainability: maintainability,
+    overall: Math.round((archScore + codeQuality + security + docScore + maintainability) / 5),
   };
 
   // Generate final aggregation via LLM
@@ -356,7 +384,7 @@ async function analyzeRepo(repoData, onProgress) {
       strengths: ['Active repository with contributors'],
       risks: allFindings.filter(f => f.severity === 'CRITICAL').length > 0
         ? [`${allFindings.filter(f => f.severity === 'CRITICAL').length} critical issues found`] : ['No major risks identified'],
-      verdict: `${repoData.metadata.full_name} is a ${aggregatedScores.overall >= 70 ? 'healthy' : 'concerning'} codebase. ${allFindings.filter(f => f.severity === 'CRITICAL').length > 0 ? 'Critical issues need immediate attention.' : 'Overall quality is acceptable.'}`,
+      verdict: `${repoData.metadata.full_name} is a ${aggregatedScores.overall >= 70 ? 'healthy' : 'concerning'} codebase. ${allFindings.filter(f => f.severity === 'CRITICAL').length > 0 ? 'Critical issues need immediate attention.' : 'Overall quality is good.'}`,
     };
   }
 
