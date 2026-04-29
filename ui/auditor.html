@@ -228,6 +228,26 @@
     box-shadow: 0 0 0 3px rgba(124,92,252,0.1);
   }
   .audit-card input::placeholder { color: rgba(255,255,255,0.15); }
+  .audit-options {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .audit-options label {
+    font-size: 0.8rem; color: var(--muted);
+  }
+  .audit-options select {
+    padding: 6px 10px; border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text); font-size: 0.82rem;
+    font-family: inherit; outline: none; cursor: pointer;
+  }
+  .audit-options select:focus {
+    border-color: var(--accent);
+  }
+  .audit-options .file-hint {
+    font-size: 0.75rem; color: rgba(255,255,255,0.2);
+  }
   .examples {
     display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;
   }
@@ -505,6 +525,16 @@
       <input id="repo-input" type="text" placeholder="user/repo or full GitHub URL" autofocus>
       <button id="audit-btn" class="btn btn-primary" onclick="runAudit()" style="padding:14px 24px;flex-shrink:0;">Audit →</button>
     </div>
+    <div class="audit-options">
+      <label for="file-count">Files to analyze:</label>
+      <select id="file-count">
+        <option value="10" selected>10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      <span class="file-hint">More files = slower but deeper analysis</span>
+    </div>
     <div id="progress" class="progress-steps" style="display:none;">
       <span class="progress-step" id="p-fetch"><span class="p-dot"></span> Fetching</span>
       <span class="progress-step" id="p-structural"><span class="p-dot"></span> Structure</span>
@@ -702,7 +732,7 @@ async function runAudit() {
     const resp = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo, maxFiles: 10 }),
+      body: JSON.stringify({ repo, maxFiles: parseInt(document.getElementById('file-count').value, 10) || 10 }),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
