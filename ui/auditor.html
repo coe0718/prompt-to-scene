@@ -256,7 +256,6 @@
   .sidebar-right {
     position: sticky; top: 24px;
     width: 280px; flex-shrink: 0;
-    display: none;
   }
   .history-card {
     padding: 16px; border-radius: 12px;
@@ -850,7 +849,6 @@ async function refreshHistory() {
         '<div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
         '</div>';
     }).join('');
-    document.getElementById('sidebar-history').style.display = 'block';
   } catch(e) {
     // History widget fails silently
   }
