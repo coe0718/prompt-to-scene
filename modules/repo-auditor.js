@@ -44,7 +44,7 @@ const LLM_ENDPOINTS = {
   },
 };
 
-function callLLM(messages, model = 'minimax', temperature = 0.3) {
+function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 4096) {
   const config = LLM_ENDPOINTS[model];
   if (!config) throw new Error('Unknown model: ' + model);
   const key = config.key();
@@ -56,7 +56,7 @@ function callLLM(messages, model = 'minimax', temperature = 0.3) {
       model: config.model,
       messages,
       temperature,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
     });
 
     const urlObj = new URL(config.url);
@@ -495,7 +495,7 @@ async function generateFixPR(auditResult, repoUrl) {
     const raw = await callLLM([
       { role: 'system', content: PR_GENERATION_PROMPT },
       { role: 'user', content: JSON.stringify(context, null, 2) },
-    ], model, 0.5);
+    ], model, 0.5, 8192);
     const prPlan = JSON.parse(extractJSON(raw));
 
     return {
