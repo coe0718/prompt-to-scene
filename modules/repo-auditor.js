@@ -544,6 +544,17 @@ function extractJSON(text) {
   // Extract JSON from response — find balanced braces
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
+    // No closing brace found — try truncation salvage from first {
+    const firstBrace = clean.indexOf('{');
+    if (firstBrace >= 0) {
+      const partial = clean.slice(firstBrace);
+      // Try trailing comma fix + progressive truncation
+      const fixed = partial.replace(/,(\s*[}\]])/g, '$1');
+      try { return JSON.parse(fixed); } catch(_) {}
+      for (let i = fixed.length; i > 0; i -= 8) {
+        try { return JSON.parse(fixed.slice(0, i)); } catch(_) {}
+      }
+    }
     const fs = require('fs');
     const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
     fs.writeFileSync(dumpPath, text);
