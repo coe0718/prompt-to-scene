@@ -405,7 +405,7 @@ async function analyzeRepo(repoData, onProgress) {
     const aggRaw = await callLLM([
       { role: 'system', content: AGGREGATION_SYSTEM },
       { role: 'user', content: JSON.stringify(aggInput, null, 2) },
-    ], model, 0.4);
+    ], model, 0.4, 8192);
     finalReport = JSON.parse(extractJSON(aggRaw));
   } catch(e) {
     console.warn('Auditor: Aggregation failed, building default report:', e.message);
@@ -472,7 +472,23 @@ function extractJSON(text) {
     if (jsonStr[i] === '}') braceCount--;
     if (braceCount === 0) { endIndex = i + 1; break; }
   }
-  return jsonStr.substring(0, endIndex);
+  let result = jsonStr.substring(0, endIndex || undefined);
+
+  // Try to parse; if it fails, attempt salvage
+  try {
+    JSON.parse(result);
+    return result;
+  } catch(_) {
+    // Attempt 1: remove trailing commas before closing brackets/braces
+    result = result.replace(/,(\s*[}\]])/g, '$1');
+    try { JSON.parse(result); return result; } catch(_) {}
+    // Attempt 2: strip trailing characters until JSON parses
+    for (let i = result.length; i > 0; i -= 4) {
+      try { return JSON.parse(result.slice(0, i)); } catch(_) {}
+    }
+    // Nothing worked — return what we have and let caller handle the error
+    throw new Error('Could not extract valid JSON from response');
+  }
 }
 
 // ─── PR Generation ──────────────────────────────────────────────────────────

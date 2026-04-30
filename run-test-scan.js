@@ -23,7 +23,7 @@ async function run() {
   log('Fetching repo...');
   const data = await fetcher.fetchRepo(
     'https://github.com/nousresearch/hermes-agent',
-    { maxFiles: 10 }
+    { maxFiles: 50 }
   );
   log('Fetched ' + data.files.length + ' files');
 

@@ -33,9 +33,10 @@ const ALWAYS_INCLUDE = new Set([
 // Files/directories to skip
 const SKIP_PATHS = new Set([
   'node_modules', '.git', '__pycache__', 'target', 'build', 'dist',
-  '.next', '.nuxt', 'venv', '.venv', 'vendor', '.git',
+  '.next', '.nuxt', 'venv', '.venv', 'vendor',
   'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
   '.DS_Store', '*.min.js', '*.min.css',
+  '.vscode', '.idea', '.cursor',
 ]);
 
 // Directories to prioritize (look here first)
@@ -102,7 +103,6 @@ function shouldSkip(path) {
   const parts = path.split('/');
   for (const part of parts) {
     if (SKIP_PATHS.has(part)) return true;
-    if (part.startsWith('.')) return true; // skip hidden dirs
   }
   return false;
 }
