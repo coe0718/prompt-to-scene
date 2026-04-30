@@ -24,6 +24,17 @@ const LLM_ENDPOINTS = {
       'X-Title': 'Archiview',
     }),
   },
+  minimax27: {
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'minimax/minimax-m2.7',
+    key: () => process.env.OPENROUTER_API_KEY || '',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+      'HTTP-Referer': 'https://repo-audit.local',
+      'X-Title': 'Archiview',
+    }),
+  },
   kimi26: {
     url: 'https://openrouter.ai/api/v1/chat/completions',
     model: 'moonshotai/kimi-k2.6',
@@ -310,7 +321,7 @@ async function analyzeRepo(repoData, onProgress) {
       const raw = await callLLM([
         { role: 'system', content: DEEP_ANALYSIS_SYSTEM },
         { role: 'user', content: `Analyze these files:\n\n${chunkContent.slice(0, 6000)}` },
-      ], model === 'kimi' ? 'fast' : model);
+      ], model === 'kimi26' ? 'minimax27' : (model === 'kimi' ? 'fast' : model));
       const parsed = JSON.parse(extractJSON(raw));
       deepResults.push(parsed);
     } catch(e) {
