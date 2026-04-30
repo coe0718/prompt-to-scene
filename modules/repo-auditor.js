@@ -657,22 +657,54 @@ Output ONLY valid JSON. No markdown, no explanation.
 async function fetchGitHubFile(repoFullName, filePath) {
   const [owner, repo] = repoFullName.split('/');
   const https = require('https');
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
   const token = process.env.GITHUB_TOKEN;
 
-  return new Promise((resolve, reject) => {
-    const headers = { 'User-Agent': 'Archiview/1.0', 'Accept': 'application/vnd.github.v3.raw' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+  async function rawFetch(path) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    return new Promise((resolve, reject) => {
+      const headers = { 'User-Agent': 'Archiview/1.0', 'Accept': 'application/vnd.github.v3.raw' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      https.get(url, { headers }, (res) => {
+        let data = '';
+        res.on('data', c => data += c);
+        res.on('end', () => {
+          if (res.statusCode === 404) return reject(new Error('not found'));
+          if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+          resolve(data);
+        });
+      }).on('error', reject);
+    });
+  }
 
-    https.get(url, { headers }, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        if (res.statusCode !== 200) return reject(new Error(`GitHub ${res.statusCode} fetching ${filePath}`));
-        resolve(data);
-      });
-    }).on('error', reject);
-  });
+  try {
+    return await rawFetch(filePath);
+  } catch(e) {
+    // File not found at given path — search the repo tree for matching filename
+    const filename = filePath.split('/').pop();
+    console.warn(`PR: ${filePath} not found, searching tree for "${filename}"...`);
+    const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`;
+    const tree = await new Promise((resolve, reject) => {
+      const headers = { 'User-Agent': 'Archiview/1.0', 'Accept': 'application/vnd.github.v3+json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      https.get(treeUrl, { headers }, (res) => {
+        let data = '';
+        res.on('data', c => data += c);
+        res.on('end', () => {
+          if (res.statusCode !== 200) return reject(new Error(`Tree fetch HTTP ${res.statusCode}`));
+          try { resolve(JSON.parse(data)); } catch(e) { reject(new Error('Parse error')); }
+        });
+      }).on('error', reject);
+    });
+
+    const matches = (tree.tree || [])
+      .filter(item => item.type === 'blob' && item.path.endsWith('/' + filename))
+      .sort((a, b) => b.path.split('/').length - a.path.split('/').length); // prefer deeper (more specific) paths
+
+    if (matches.length === 0) throw new Error(`File "${filename}" not found anywhere in the repo`);
+
+    console.warn(`PR: Found ${filename} at ${matches[0].path}`);
+    return await rawFetch(matches[0].path);
+  }
 }
 
 async function generateFixPR(auditResult, repoUrl) {
