@@ -23,8 +23,17 @@ async function test() {
   const REPO = 'https://github.com/nousresearch/hermes-agent';
   const LOG = '/tmp/archiview-pr-test.log';
   function log(msg) {
-    fs.appendFileSync(LOG, new Date().toISOString().slice(11, 19) + ' ' + msg + '\n');
-    process.stderr.write(msg + '\n');
+    const now = new Date();
+    const utc = now.toISOString().replace('T', ' ').slice(0, 19);
+    const local = now.toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).replace(',', '');
+    const tz = 'EDT';
+    const line = `${local} ${tz} | ${msg}`;
+    fs.appendFileSync(LOG, `${utc} UTC | ${msg}\n`);
+    process.stderr.write(line + '\n');
   }
 
   log('Fetching repo (10 files)...');

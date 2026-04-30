@@ -1084,4 +1084,4 @@ async function publishPR(prPlan, repoUrl) {
   };
 }
 
-module.exports = { analyzeRepo, generateFixPR, publishPR, extractJSON };
+module.exports = { analyzeRepo, generateFixPR, publishPR, extractJSON, callLLM };
