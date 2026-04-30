@@ -53,6 +53,7 @@ async function run() {
     if (dr.patch) {
       console.log('Patch:    ' + (dr.patch.summary || '(no summary)'));
       console.log('Diff:     ' + (dr.patch.diff_summary || '(no diff)'));
+      if (dr.patch.diff_preview) console.log('Diff preview:\n' + dr.patch.diff_preview);
       console.log('Branch:   ' + dr.pr_draft.branch);
       console.log('Validation: ' + JSON.stringify(dr.validation, null, 2));
     } else if (dr.error) {
