@@ -310,7 +310,7 @@ async function analyzeRepo(repoData, onProgress) {
       const raw = await callLLM([
         { role: 'system', content: DEEP_ANALYSIS_SYSTEM },
         { role: 'user', content: `Analyze these files:\n\n${chunkContent.slice(0, 6000)}` },
-      ], model === 'kimi' ? 'fast' : model);
+      ], model === 'kimi26' ? 'minimax' : (model === 'kimi' ? 'fast' : model));
       const parsed = JSON.parse(extractJSON(raw));
       deepResults.push(parsed);
     } catch(e) {
