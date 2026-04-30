@@ -910,8 +910,8 @@ async function handleAuditPR(req, res) {
   try {
     const planResult = await repoAuditor.generateFixPR(cached.result, repoUrl);
 
-    // Cache the PR plan too
-    auditCache.set(repoUrl, { ...cached, prPlan: planResult.pr, planTimestamp: Date.now() });
+    // Cache the dry-run result (no auto-publishing yet)
+    auditCache.set(repoUrl, { ...cached, dryRun: planResult.dry_run, dryRunTimestamp: Date.now() });
 
     jsonResponse(res, 200, planResult);
   } catch(e) {

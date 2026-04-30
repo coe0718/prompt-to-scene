@@ -593,25 +593,85 @@ function extractJSON(text) {
   }
 }
 
-// ─── PR Generation ──────────────────────────────────────────────────────────
+// ─── PR Generation (Dry-Run) ────────────────────────────────────────────────
+//
+// Two-step process:
+//   1. Selector — LLM picks the best single-fix candidate from findings
+//   2. Fixer — LLM generates the actual code fix
+//
+// Outputs a dry-run package. No auto-commits, no auto-PRs.
 
-const PR_GENERATION_PROMPT = `You are an automated PR generator. Based on the audit findings below, generate a pull request that addresses the most critical issues.
+const PR_SELECTOR_PROMPT = `You are selecting the BEST single candidate for an automated fix pull request.
+
+Given audit findings for a codebase, choose ONE finding that would make the ideal first PR.
+
+Selection criteria (in priority order):
+1. Security or correctness bug — NOT style, maintainability, or docs
+2. Single-file fix — the fix touches exactly one file
+3. Tiny obvious fix — minimal code change, clear before/after
+4. Low blast radius — won't break other functionality
+5. Easy for a human maintainer to review and merge in under 60 seconds
+6. Testable or statically verifiable (lint, typecheck, or obvious correctness)
+7. NOT speculative — the fix is clearly correct, not "might improve things"
+8. NOT docs-only (unless the repo is a documentation project)
 
 Output ONLY valid JSON. No markdown, no explanation.
 
 {
-  "pr_title": "descriptive PR title (under 72 chars)",
-  "pr_body": "detailed description of changes, why they matter, and testing notes",
-  "files": [
-    {
-      "path": "file path",
-      "change_type": "create|modify|delete",
-      "description": "what changed in this file",
-      "code_snippet": "the new code or key change (if modifying)"
-    }
-  ],
-  "branch_name": "suggested git branch name"
+  "selected": {
+    "finding_index": "index into the findings array (0-based)",
+    "severity": "CRITICAL|WARNING",
+    "file": "file path relative to repo root",
+    "title": "finding title",
+    "fix_summary": "2-3 sentence description of what the fix does"
+  },
+  "rejected_runner_ups": ["brief note on why other top candidates weren't selected"],
+  "confidence": "high|medium|low",
+  "confidence_reasoning": "one-sentence justification"
 }`;
+
+const PR_FIXER_PROMPT = `You are generating a surgical fix for a single code review finding.
+
+Rules:
+- Make ONLY the minimal changes needed to address the finding
+- Do NOT refactor, reformat, improve naming, or touch anything else
+- The fix must be correct and complete — no placeholders or TODOs
+- Output the ENTIRE fixed file content, not just the changed lines
+
+Output ONLY valid JSON. No markdown, no explanation.
+
+{
+  "success": true,
+  "summary": "brief summary of what changed",
+  "diff_summary": "what lines changed and how (e.g., 'Added null check on line 42')",
+  "full_file_content": "the COMPLETE file content after applying the fix",
+  "verification": {
+    "test_command": "likely test command if applicable, or null",
+    "lint_command": "likely lint/typecheck command if applicable, or null",
+    "static_sanity": "brief manual verification note"
+  }
+}`;
+
+async function fetchGitHubFile(repoFullName, filePath) {
+  const [owner, repo] = repoFullName.split('/');
+  const https = require('https');
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+  const token = process.env.GITHUB_TOKEN;
+
+  return new Promise((resolve, reject) => {
+    const headers = { 'User-Agent': 'Archiview/1.0', 'Accept': 'application/vnd.github.v3.raw' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    https.get(url, { headers }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        if (res.statusCode !== 200) return reject(new Error(`GitHub ${res.statusCode} fetching ${filePath}`));
+        resolve(data);
+      });
+    }).on('error', reject);
+  });
+}
 
 async function generateFixPR(auditResult, repoUrl) {
   const findings = auditResult.findings || [];
@@ -619,34 +679,160 @@ async function generateFixPR(auditResult, repoUrl) {
   const warnings = findings.filter(f => f.severity === 'WARNING');
 
   if (criticalIssues.length === 0 && warnings.length === 0) {
-    return { pr: null, message: 'No issues found that need a PR' };
+    return { dry_run: null, message: 'No CRITICAL or WARNING findings — nothing to PR' };
   }
 
-  const context = {
-    repo: auditResult.metadata.full_name,
-    scores: auditResult.scores,
-    total_findings: findings.length,
-    critical_count: criticalIssues.length,
-    warning_count: warnings.length,
-    critical_findings: criticalIssues.slice(0, 5),
-    warning_findings: warnings.slice(0, 5),
+  const repoFullName = auditResult.metadata?.full_name || repoUrl;
+  const model = process.env.OPENROUTER_API_KEY ? 'kimi26' : (process.env.NVIDIA_API_KEY ? 'kimi' : 'minimax');
+
+  // ─── Step 1: Select the best finding ──────────────────────────────────
+  console.log('PR: Selecting best fix candidate...');
+  let selectedFinding, selectorResult;
+  try {
+    const selectorInput = {
+      repo: repoFullName,
+      total_findings: findings.length,
+      critical_count: criticalIssues.length,
+      warning_count: warnings.length,
+      findings,
+    };
+    const raw = await callLLM([
+      { role: 'system', content: PR_SELECTOR_PROMPT },
+      { role: 'user', content: JSON.stringify(selectorInput, null, 2) },
+    ], model, 0.3, 4096);
+    selectorResult = JSON.parse(extractJSON(raw));
+    selectedFinding = findings[selectorResult.selected.finding_index];
+
+    if (!selectedFinding) {
+      return { dry_run: null, error: `Selected finding index ${selectorResult.selected.finding_index} not found in findings` };
+    }
+  } catch(e) {
+    return { dry_run: null, error: 'Candidate selection failed: ' + e.message.slice(0, 200) };
+  }
+
+  // ─── Step 2: Fetch file content from GitHub ───────────────────────────
+  console.log(`PR: Fetching ${selectedFinding.file} from ${repoFullName}...`);
+  let fileContent;
+  try {
+    fileContent = await fetchGitHubFile(
+      repoFullName.replace(/^https?:\/\/github\.com\//, ''),
+      selectedFinding.file
+    );
+  } catch(e) {
+    return {
+      dry_run: {
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
+        },
+        patch: null,
+        error: `Could not fetch file from GitHub: ${e.message}`,
+      },
+      message: 'Selection succeeded but file fetch failed — check permissions or repo visibility',
+    };
+  }
+
+  // ─── Step 3: Generate the fix ─────────────────────────────────────────
+  console.log('PR: Generating fix...');
+  let fixResult;
+  try {
+    const fixerInput = {
+      severity: selectedFinding.severity,
+      title: selectedFinding.title,
+      description: selectedFinding.description,
+      suggestion: selectedFinding.suggestion,
+      file_path: selectedFinding.file,
+      file_content: fileContent,
+    };
+    const raw = await callLLM([
+      { role: 'system', content: PR_FIXER_PROMPT },
+      { role: 'user', content: JSON.stringify(fixerInput, null, 2) },
+    ], model, 0.3, 8192);
+    fixResult = JSON.parse(extractJSON(raw));
+  } catch(e) {
+    return {
+      dry_run: {
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
+        },
+        original_content: fileContent.slice(0, 2000) + '\n\n... (truncated)',
+        patch: null,
+        error: 'Fix generation failed: ' + e.message.slice(0, 200),
+      },
+      message: 'Selection and fetch succeeded but fix generation failed',
+    };
+  }
+
+  // ─── Step 4: Build dry-run package ────────────────────────────────────
+  const branchName = 'fix/' + selectedFinding.file
+    .replace(/\.\w+$/, '')         // remove extension
+    .replace(/[\/\\]/g, '-')       // slashes to dashes
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .toLowerCase()
+    .slice(0, 40);
+
+  const dryRun = {
+    selected_finding: {
+      severity: selectedFinding.severity,
+      category: selectedFinding.category,
+      file: selectedFinding.file,
+      title: selectedFinding.title,
+      description: selectedFinding.description,
+      fix_summary: selectorResult.selected.fix_summary,
+      reason_selected: selectorResult.confidence_reasoning || '',
+      rejected_alternatives: selectorResult.rejected_runner_ups || [],
+      confidence: selectorResult.confidence,
+    },
+    patch: {
+      file: selectedFinding.file,
+      change_type: 'modify',
+      summary: fixResult.summary,
+      diff_summary: fixResult.diff_summary,
+      original_content_preview: fileContent.slice(0, 500) + (fileContent.length > 500 ? '\n...' : ''),
+      new_content_preview: fixResult.full_file_content.slice(0, 500) + (fixResult.full_file_content.length > 500 ? '\n...' : ''),
+    },
+    validation: fixResult.verification || { test_command: null, lint_command: null, static_sanity: null },
+    pr_draft: {
+      title: `fix: ${selectedFinding.title.slice(0, 60)}`,
+      body: [
+        `## Description`,
+        ``,
+        fixResult.summary || selectedFinding.description,
+        ``,
+        `**Finding:** ${selectedFinding.severity} — ${selectedFinding.title}`,
+        `**File:** \`${selectedFinding.file}\``,
+        ``,
+        `## Risk Assessment`,
+        ``,
+        `- **Blast radius:** Single file, single concern`,
+        `- **Change type:** Surgical fix (${fixResult.diff_summary || 'minimal change'})`,
+        `- **Breaking potential:** Low — narrow scope, well-defined fix`,
+        ``,
+        `## Validation`,
+        ``,
+      ].join('\n'),
+      branch: branchName,
+    },
   };
 
-  try {
-    const model = process.env.OPENROUTER_API_KEY ? 'kimi26' : (process.env.NVIDIA_API_KEY ? 'kimi' : 'minimax');
-    const raw = await callLLM([
-      { role: 'system', content: PR_GENERATION_PROMPT },
-      { role: 'user', content: JSON.stringify(context, null, 2) },
-    ], model, 0.5, 8192);
-    const prPlan = JSON.parse(extractJSON(raw));
+  // Add validation section
+  const v = fixResult.verification || {};
+  if (v.test_command) dryRun.pr_draft.body += `- **Test:** \`${v.test_command}\`\n`;
+  if (v.lint_command) dryRun.pr_draft.body += `- **Lint:** \`${v.lint_command}\`\n`;
+  if (v.static_sanity) dryRun.pr_draft.body += `- **Sanity check:** ${v.static_sanity}\n`;
+  dryRun.pr_draft.body += `\n---\n*Generated by Archiview · Autonomous AI Audit*\n`;
 
-    return {
-      pr: prPlan,
-      message: `PR generated: "${prPlan.pr_title}" — ${prPlan.files?.length || 0} files changed`,
-    };
-  } catch(e) {
-    return { error: 'PR generation failed: ' + e.message, pr: null };
-  }
+  return {
+    dry_run: dryRun,
+    message: `Dry-run PR package ready: "${selectedFinding.title}" in ${selectedFinding.file}`,
+  };
 }
 
 // ─── GitHub API Helpers ─────────────────────────────────────────────────────
