@@ -69,7 +69,7 @@ open http://localhost:7041
 | **Radar Chart** | SVG pentagon visualization in every report |
 | **Live SSE Streaming** | Watch Kimi's reasoning steps in real time |
 | **Prioritized Findings** | CRITICAL / WARNING / INFO with file locations and fix suggestions |
-| **Auto-Fix PR Generation** | Generate pull requests addressing critical findings |
+| **Smart PR Generation** | Evaluates findings through safety gates (no docs, no vendor, validation required), generates unified diffs, and produces human-reviewable dry-run packages with structured rejection summaries — no auto-push, no noise |
 | **Download Report** | Standalone HTML file, all CSS inlined, no server needed |
 | **Print / Save as PDF** | Opens report in new window with print dialog |
 | **SVG Badge** | `[![Archiview](/api/audit/badge?repo=user/repo)](...)` — paste in any README |
@@ -79,14 +79,6 @@ open http://localhost:7041
 | **Self-Audit** | Click "🔍 self-audit" — the auditor audits its own codebase |
 | **File Count Selector** | Choose 10/25/50/100 files for depth vs. speed control |
 | **One-Click Re-audit** | Click any history entry to re-run |
-
-### 🎨 Prompt-to-Scene (Creative Tool)
-
-Originally built as a creative tool — still available at `/creative`:
-- Text, Image, and Audio → generative visual scenes
-- p5.js (8 styles, 6 effects), ASCII art (6 styles), procedural audio
-- 20 built-in presets (no API key required)
-- Standalone HTML export
 
 ---
 
@@ -116,21 +108,6 @@ The badge shows the overall score (color-coded) and links back to the full repor
 | `POST` | `/api/audit/pr` | Generate fix PR plan from cached audit |
 | `POST` | `/api/audit/pr/publish` | Publish PR to GitHub (needs GITHUB_TOKEN) |
 
-### Creative Tool
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/creative` | Creative tool UI |
-| `GET` | `/landing` | Marketing page |
-| `POST` | `/api/generate` | Text prompt → Director → scene spec |
-| `POST` | `/api/generate-from-image` | Image → Vision → scene spec |
-| `POST` | `/api/generate/p5js` | Scene spec → p5.js HTML |
-| `POST` | `/api/generate/ascii` | Scene spec → ASCII HTML |
-| `POST` | `/api/generate/ascii-enhanced` | Scene spec → 4-layer ASCII |
-| `POST` | `/api/generate/procedural-audio` | Scene spec → audio HTML |
-| `POST` | `/api/generate/stitch` | Scene spec → stitched A/V HTML |
-| `POST` | `/api/export` | Download standalone HTML |
-
 ---
 
 ## Tech Stack
@@ -141,8 +118,6 @@ The badge shows the overall score (color-coded) and links back to the full repor
 | **LLM** | Kimi K2.5 (moonshotai/kimi-k2.5) via NVIDIA NIM |
 | **Fallback** | MiniMax M2.5 via OpenRouter |
 | **Frontend** | Pure HTML/CSS/JS (no build step) |
-| **Visuals** | p5.js 1.9.4 (creative tool) |
-| **Audio** | Web Audio API (procedural synthesis) |
 | **Containers** | Docker + docker-compose |
 
 ---
@@ -189,6 +164,12 @@ Every line of code in this project was written by autonomous AI agents working c
 ├── Dockerfile
 └── docker-compose.yml
 ```
+
+---
+
+## Also Available
+
+This repo also contains **Prompt-to-Scene** — a creative tool that turns text, images, and audio into generative visual scenes (p5.js, ASCII art, procedural audio). 20 built-in presets work without an API key. Visit `/creative` after starting the server.
 
 ---
 
