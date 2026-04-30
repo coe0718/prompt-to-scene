@@ -66,6 +66,14 @@ async function test() {
     console.log('Diff:     ' + dr.patch.diff_summary);
     console.log('Branch:   ' + dr.pr_draft.branch);
     console.log('Full output in data/pr-dry-run.json');
+  } else if (prResult.rejection_summary) {
+    console.log('\n=== NO SAFE PR CANDIDATE — INTENTIONAL REJECTION ===');
+    console.log('Message: ' + (prResult.message || 'No safe first-demo PR candidate found.'));
+    console.log('Breakdown:');
+    for (const [key, count] of Object.entries(prResult.rejection_summary)) {
+      if (count > 0) console.log('  - ' + key + ': ' + count + ' findings rejected');
+    }
+    console.log('\nFull output in data/pr-dry-run.json');
   } else {
     console.log(JSON.stringify(prResult, null, 2));
   }
