@@ -636,7 +636,9 @@ Rules:
 - Make ONLY the minimal changes needed to address the finding
 - Do NOT refactor, reformat, improve naming, or touch anything else
 - The fix must be correct and complete — no placeholders or TODOs
+- Assume the finding is legitimate. Even if the file looks clean, the issue may be subtle.
 - Output the ENTIRE fixed file content, not just the changed lines
+- If the file is already correct, output it unchanged and explain in the summary
 
 Output ONLY valid JSON. No markdown, no explanation.
 
@@ -718,7 +720,7 @@ async function generateFixPR(auditResult, repoUrl) {
       }
 
       selectorResult = JSON.parse(extractJSON(raw));
-      selectedFinding = findings[selectorResult.selected.finding_index];
+      selectedFinding = selectorFindings[selectorResult.selected.finding_index];
 
       if (!selectedFinding) {
         return { dry_run: null, error: `Selected finding index ${selectorResult.selected.finding_index} not found in findings` };
