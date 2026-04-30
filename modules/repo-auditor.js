@@ -574,9 +574,9 @@ function extractJSON(text) {
       const partial = clean.slice(firstBrace);
       // Try trailing comma fix + progressive truncation
       const fixed = partial.replace(/,(\s*[}\]])/g, '$1');
-      try { return JSON.parse(fixed); } catch(_) {}
+      try { JSON.parse(fixed); return fixed; } catch(_) {}
       for (let i = fixed.length; i >= 0; i--) {
-        try { return JSON.parse(fixed.slice(0, i)); } catch(_) {}
+        try { JSON.parse(fixed.slice(0, i)); return fixed.slice(0, i); } catch(_) {}
       }
     }
     const fs = require('fs');
@@ -589,14 +589,14 @@ function extractJSON(text) {
 
   // FIRST: try parsing the full match — JSON.parse correctly handles braces
   // inside string values, unlike naive brace counting.
-  try { return JSON.parse(jsonStr); } catch(_) {}
+  try { JSON.parse(jsonStr); return jsonStr; } catch(_) {}
 
   // Full parse failed — likely truncated. Try progressively shorter strings
   // from the end until JSON.parse succeeds. This handles mid-string truncation
   // where no balanced brace pair exists in the output.
   for (let i = jsonStr.length - 1; i >= 0; i--) {
     const candidate = jsonStr.slice(0, i + 1).replace(/,\s*([}\]])/g, '$1');
-    try { return JSON.parse(candidate); } catch(_) {}
+    try { JSON.parse(candidate); return candidate; } catch(_) {}
   }
   // Dump raw response for inspection
   const fs = require('fs');
