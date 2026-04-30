@@ -357,7 +357,18 @@ async function analyzeRepo(repoData, onProgress) {
 
   // ─── Pass 2: Deep Analysis ────────────────────────────────────────────
   console.log('Auditor: Pass 2 — Deep analysis...');
-  const chunks = chunkFiles(repoData.files);
+  // Filter out documentation files — no README typos, no doc fixes
+  const codeFiles = repoData.files.filter(f => {
+    const path = f.path.toLowerCase();
+    // Keep source files, skip docs
+    if (path.endsWith('.md') || path.endsWith('.mdx') || path.endsWith('.txt') || path.endsWith('.rst')) return false;
+    if (path.startsWith('docs/') || path.startsWith('examples/') || path.includes('/docs/') || path.includes('/examples/')) return false;
+    if (path.endsWith('/license') || path.endsWith('/copying') || path.endsWith('/authors')) return false;
+    if (path === 'license' || path === 'copying' || path === 'authors') return false;
+    if (/^changelog/i.test(path) || /^contributing/i.test(path) || /^security/i.test(path)) return false;
+    return true;
+  });
+  const chunks = chunkFiles(codeFiles);
   const deepResults = [];
 
   for (let i = 0; i < chunks.length; i++) {
@@ -630,18 +641,37 @@ const PR_SELECTOR_PROMPT = `You are selecting the BEST single candidate for an a
 
 Given audit findings for a codebase, choose ONE finding that would make the ideal first PR.
 
+HARD REJECT — NEVER select a finding matching ANY of these:
+- Documentation-only (README, docs, comments, .md, .txt, .rst files)
+- Generated / build output (dist/, build/, target/, *.min.js)
+- Vendor / dependencies (vendor/, node_modules/)
+- Lockfiles (package-lock.json, Cargo.lock, *.lock)
+- Test fixtures / snapshots (fixtures/, __snapshots__/)
+- Coverage reports (coverage/)
+- Missing validation command (no test_command or lint_command available)
+- Truncated or unverifiable patch (diff cannot be confirmed)
+
+PREFERRED paths (in order):
+- src/**
+- lib/**
+- app/**
+- packages/*/src/**
+- crates/*/src/**
+- Any top-level source file (.py, .js, .ts, .rs, .go, .java, .c, .cpp, etc.)
+
 Selection criteria (in priority order):
-1. Security or correctness bug — NOT style, maintainability, or docs
-2. Single-file fix — the fix touches exactly one file
+1. Security or correctness bug — NEVER style, maintainability, or docs
+2. Single-file fix — touches exactly one file
 3. Tiny obvious fix — minimal code change, clear before/after
 4. Low blast radius — won't break other functionality
 5. Easy for a human maintainer to review and merge in under 60 seconds
 6. Testable or statically verifiable (lint, typecheck, or obvious correctness)
 7. NOT speculative — the fix is clearly correct, not "might improve things"
-8. NOT docs-only (unless the repo is a documentation project)
+8. MUST be a source code file in a source code path (src/, lib/, app/, crates/, or top-level source)
 
 Output ONLY valid JSON. No markdown, no explanation.
 
+If a good candidate exists:
 {
   "selected": {
     "finding_index": "index into the findings array (0-based)",
@@ -653,6 +683,21 @@ Output ONLY valid JSON. No markdown, no explanation.
   "rejected_runner_ups": ["brief note on why other top candidates weren't selected"],
   "confidence": "high|medium|low",
   "confidence_reasoning": "one-sentence justification"
+}
+
+If NO candidates pass all filters, output:
+{
+  "selected": null,
+  "rejection_summary": {
+    "docs_only": "count of findings rejected for documentation-only content",
+    "generated_or_vendor": "count rejected for being in dist/build/vendor/node_modules",
+    "test_only": "count rejected for being test-only files",
+    "multi_file_required": "count rejected because fix would span multiple files",
+    "missing_validation": "count rejected because no obvious test/lint command",
+    "speculative_or_low_confidence": "count rejected because fix is speculative or low confidence",
+    "patch_failed_apply_check": "count rejected because patch cannot be verified"
+  },
+  "message": "No safe first-demo PR candidate found under current confidence rules."
 }`;
 
 const PR_FIXER_PROMPT = `You are generating a surgical fix for a single code review finding.
@@ -673,9 +718,10 @@ Output ONLY valid JSON. No markdown, no explanation.
   "diff_summary": "what lines changed and how (e.g., 'Added null check on line 42')",
   "full_file_content": "the COMPLETE file content after applying the fix",
   "verification": {
-    "test_command": "likely test command if applicable, or null",
-    "lint_command": "likely lint/typecheck command if applicable, or null",
-    "static_sanity": "brief manual verification note"
+    "test_command": "Likely test command. Infer from repo context. NEVER null unless genuinely untestable (e.g. config file change). Examples: 'npm test', 'pytest tests/', 'cargo test', 'go test ./...'",
+    "lint_command": "Likely lint/typecheck command. Infer from repo context. NEVER null. Examples: 'npm run lint', 'ruff check .', 'cargo clippy', 'gofmt -d .'",
+    "static_validation": "How to verify this fix applies cleanly. Examples: 'git apply --check fix.diff && npm test', or 'Manually review the changed line'",
+    "validation_confidence": "high|medium|low"
   }
 }`;
 
@@ -733,7 +779,14 @@ async function fetchGitHubFile(repoFullName, filePath) {
 }
 
 async function generateFixPR(auditResult, repoUrl) {
-  const findings = auditResult.findings || [];
+  const findings = (auditResult.findings || []).filter(f => {
+    // Guard: reject doc/generated/lockfile/test-fixture findings at function entry
+    const path = (f.file || '').toLowerCase();
+    if (/\.mdx?$|\.txt$|\.rst$|\.min\.(js|css)$|\bpackage-lock\.json$|\bCargo\.lock$|\.lock$/.test(path)) return false;
+    if (/^docs\/|^examples\/|^dist\/|^build\/|^target\/|^vendor\/|^node_modules\/|^coverage\//.test(path)) return false;
+    if (/\/docs\/|\/examples\/|\/dist\/|\/build\/|\/target\/|\/vendor\/|\/node_modules\/|\/coverage\/|\/fixtures\/|__snapshots__\//.test(path)) return false;
+    return true;
+  });
   const criticalIssues = findings.filter(f => f.severity === 'CRITICAL');
   const warnings = findings.filter(f => f.severity === 'WARNING');
 
@@ -777,6 +830,18 @@ async function generateFixPR(auditResult, repoUrl) {
       }
 
       selectorResult = JSON.parse(extractJSON(raw));
+
+      // Handle intentional rejection (no viable candidate)
+      if (selectorResult.selected === null || selectorResult.selected === undefined) {
+        const reason = selectorResult.rejection_summary || {};
+        const msg = selectorResult.message || 'No safe first-demo PR candidate found.';
+        console.warn(`PR: Selector rejected all candidates — ${msg}`);
+        if (Object.keys(reason).length) {
+          console.warn('PR: Rejection breakdown:', JSON.stringify(reason));
+        }
+        return { dry_run: null, message: msg, rejection_summary: reason };
+      }
+
       selectedFinding = selectorFindings[selectorResult.selected.finding_index];
 
       if (!selectedFinding) {
@@ -787,6 +852,38 @@ async function generateFixPR(auditResult, repoUrl) {
       if (attempt === 0) { console.warn('PR: Selector attempt 1 failed, retrying:', e.message); continue; }
       return { dry_run: null, error: 'Candidate selection failed: ' + e.message.slice(0, 200) };
     }
+  }
+
+  // ─── Gate 3a: Post-extraction path reject ─────────────────────────────
+  // HARD reject docs, generated, vendor, lockfiles, test fixtures for first-demo PRs
+  const hardReject = [
+    // Docs
+    /\.mdx?$/, /\.txt$/, /\.rst$/, /^docs\//, /^examples\//, /\/docs\//, /\/examples\//,
+    // Generated / build output
+    /^dist\//, /^build\//, /^target\//, /\/dist\//, /\/build\//, /\/target\//,
+    // Vendor / dependencies
+    /^vendor\//, /^node_modules\//, /\/vendor\//, /\/node_modules\//,
+    // Lockfiles
+    /\bpackage-lock\.json$/, /\bpnpm-lock\.yaml$/, /\bCargo\.lock$/, /\.lock$/,
+    // Minified / generated
+    /\.min\.(js|css)$/,
+    // Coverage
+    /^coverage\//, /\/coverage\//,
+    // Test fixtures / snapshots
+    /\/fixtures\//, /__snapshots__\//,
+  ];
+  // For first-demo, also reject test-only paths (tests, specs, __tests__)
+  const testReject = [
+    /^tests?\//, /\/tests?\//, /\.test\./, /\.spec\./, /__tests__\//,
+    /^cypress\//, /\/cypress\//,
+  ];
+  const fileLower = selectedFinding.file.toLowerCase();
+  if (hardReject.some(p => p.test(fileLower))) {
+    return { dry_run: null, message: `Rejected: selected finding targets non-source path (${selectedFinding.file})` };
+  }
+  // Soft reject for test-only — log why, still allow (Tuck's "broken test masks real failure" exception)
+  if (testReject.some(p => p.test(fileLower))) {
+    console.warn(`PR: Test-only path ${selectedFinding.file} — proceeding only if finding suggests real bug masked by test`);
   }
 
   // ─── Step 2: Fetch file content from GitHub ───────────────────────────
@@ -831,6 +928,43 @@ async function generateFixPR(auditResult, repoUrl) {
       { role: 'user', content: JSON.stringify(fixerInput, null, 2) },
     ], model, 0.3, 8192);
     fixResult = JSON.parse(extractJSON(raw));
+
+    // ─── Gate 3b: Post-fixer validation check ───────────────────────────
+    const ver = fixResult.verification || {};
+    if (!ver.test_command && !ver.lint_command && !ver.static_validation) {
+      return {
+        dry_run: {
+          selected_finding: {
+            severity: selectedFinding.severity,
+            file: selectedFinding.file,
+            title: selectedFinding.title,
+            fix_summary: selectorResult.selected.fix_summary,
+            confidence: selectorResult.confidence,
+          },
+          original_content: fileContent.slice(0, 2000) + '\n\n... (truncated)',
+          patch: null,
+          error: 'Validation confidence too low: no test, lint, or static validation commands produced',
+        },
+        message: 'Fix generated but rejected — no validation commands to verify correctness',
+      };
+    }
+    // If new content is identical to original, the fixer didn't actually change anything
+    if (fixResult.full_file_content === fileContent) {
+      return {
+        dry_run: {
+          selected_finding: {
+            severity: selectedFinding.severity,
+            file: selectedFinding.file,
+            title: selectedFinding.title,
+            fix_summary: selectorResult.selected.fix_summary,
+            confidence: selectorResult.confidence,
+          },
+          patch: null,
+          error: 'Fixer returned unchanged file content — no fix applied',
+        },
+        message: 'Fix output matches original — likely no issue to fix in this file',
+      };
+    }
   } catch(e) {
     return {
       dry_run: {
@@ -877,7 +1011,7 @@ async function generateFixPR(auditResult, repoUrl) {
       original_content_preview: fileContent.slice(0, 500) + (fileContent.length > 500 ? '\n...' : ''),
       new_content_preview: fixResult.full_file_content.slice(0, 500) + (fixResult.full_file_content.length > 500 ? '\n...' : ''),
     },
-    validation: fixResult.verification || { test_command: null, lint_command: null, static_sanity: null },
+    validation: fixResult.verification || { test_command: null, lint_command: null, static_validation: null, validation_confidence: 'low' },
     pr_draft: {
       title: `fix: ${selectedFinding.title.slice(0, 60)}`,
       body: [
