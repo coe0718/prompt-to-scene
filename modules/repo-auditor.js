@@ -152,7 +152,7 @@ Output ONLY valid JSON matching this schema. No markdown, no explanation.
   "recommended_focus_areas": ["2-3 areas that deserve the most scrutiny in deep analysis"]
 }`;
 
-const DEEP_ANALYSIS_SYSTEM = `You are a senior code reviewer. Analyze the following source files for code quality, security issues, and maintainability.
+const DEEP_ANALYSIS_SYSTEM = `You are an expert code reviewer who finds real issues. Examine the source files critically for code quality, security vulnerabilities, bugs, and maintainability problems.
 
 Output ONLY valid JSON. No markdown, no explanation.
 
@@ -164,7 +164,7 @@ Output ONLY valid JSON. No markdown, no explanation.
       "file": "filename",
       "line": number or null,
       "title": "short title (under 60 chars)",
-      "description": "clear explanation of the issue",
+      "description": "clear explanation of the issue with specific code references",
       "suggestion": "how to fix it"
     }
   ],
@@ -177,13 +177,15 @@ Output ONLY valid JSON. No markdown, no explanation.
   "summary": "2-3 sentence assessment of this batch of files"
 }
 
-Rules:
-- Be specific. Reference actual code patterns you observe.
+CRITICAL RULES:
+- You MUST find issues. Every codebase has problems. Even great repos have WARNING or INFO findings.
+- Return at least 1 finding per 3-4 files reviewed. Empty findings output is only for truly trivial files.
+- Be specific. Reference actual code patterns, variable names, and line numbers you observe.
 - CRITICAL = security vulnerability, data loss risk, or production crash
-- WARNING = bugs, bad practices, significant code smells
+- WARNING = bugs, bad practices, significant code smells, missing error handling
 - INFO = style issues, documentation gaps, minor improvements
-- If the batch has no issues, output {"findings": [], "scores": {"code_quality": 85, "security": 85, "maintainability": 80, "overall": 83}, "summary": "Clean code, no significant issues found."}
-- Score across the full 0-100 range. 50 is average. 80+ is good. Use the full range to differentiate repos based on actual quality.`;
+- Score across the full 0-100 range. 50 is average. 80+ is good. Use the full range.
+- If you honestly find nothing wrong in a 1-file chunk, that's fine — but still provide a score and summary.`;
 
 const AGGREGATION_SYSTEM = `You are a senior engineering director writing a final audit report. You have received structural analysis and deep analysis results for a codebase. Aggregate them into a final report.
 
