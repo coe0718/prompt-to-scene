@@ -187,7 +187,34 @@ CRITICAL RULES:
 - Score across the full 0-100 range. 50 is average. 80+ is good. Use the full range.
 - If you honestly find nothing wrong in a 1-file chunk, that's fine — but still provide a score and summary.`;
 
-const AGGREGATION_SYSTEM = `You are a senior engineering director writing a final audit report. You have received structural analysis and deep analysis results for a codebase. Aggregate them into a final report.
+const BATCH_AGGREGATION_PROMPT = `You are a senior code reviewer. Review these raw findings from an automated audit and produce a concise summary.
+
+Output ONLY valid JSON. No markdown, no explanation.
+
+{
+  "batch_summary": "2-3 sentence summary of this batch's code quality signals",
+  "top_findings": [
+    {
+      "severity": "CRITICAL|WARNING|INFO",
+      "category": "security|bug|code_quality|maintainability|performance|docs",
+      "file": "filename or 'general'",
+      "title": "short title under 60 chars",
+      "description": "clear explanation",
+      "suggestion": "how to fix"
+    }
+  ],
+  "signals": {
+    "key_issues": ["main themes from this batch"],
+    "strengths": ["positive signals from this batch"]
+  }
+}
+
+CRITICAL RULES:
+- Prioritize the most impactful findings. If duplicates exist, group them into one entry.
+- Output at most 8 findings per batch. If more exist, pick the most important.
+- Be specific. Reference actual file names and code patterns.`;
+
+const AGGREGATION_PROMPT = `You are a senior engineering director writing a final audit report. You have received structural analysis and batched deep analysis summaries for a codebase. Aggregate them into a final report.
 
 Output ONLY valid JSON. No markdown, no explanation.
 
@@ -222,7 +249,12 @@ Output ONLY valid JSON. No markdown, no explanation.
   "strengths": ["3-5 things this codebase does well"],
   "risks": ["2-3 major risks or concerns"],
   "verdict": "One sentence summary: Is this codebase healthy? What's the most important thing to fix?"
-}`;
+}
+
+CRITICAL RULES:
+- Prioritize the top 30 findings across all batches. Group duplicates.
+- Do not restate every batch finding. Synthesize.
+- Keep the verdict actionable and concise.`;
 
 // ─── Analysis Pipeline ───────────────────────────────────────────────────
 
@@ -391,20 +423,68 @@ async function analyzeRepo(repoData, onProgress) {
     overall: Math.round((archScore + codeQuality + security + docScore + maintainability) / 5),
   };
 
-  // Generate final aggregation via LLM
+  // ─── Batched Aggregation ─────────────────────────────────────────────
   let finalReport;
   try {
-    const aggInput = {
+    const BATCH_SIZE = 45;
+    const batches = [];
+    for (let i = 0; i < allFindings.length; i += BATCH_SIZE) {
+      batches.push(allFindings.slice(i, i + BATCH_SIZE));
+    }
+
+    // Step 1: Kimi summarizes each batch (40-50 findings)
+    const batchResults = [];
+    onProgress && onProgress('aggregation', `Kimi is summarizing ${batches.length} finding batches...`);
+    for (let i = 0; i < batches.length; i++) {
+      console.log(`Auditor:   Aggregation batch ${i + 1}/${batches.length} (${batches[i].length} findings)...`);
+      const batchInput = {
+        repo: repoData.metadata.full_name,
+        batch: i + 1,
+        total_batches: batches.length,
+        findings: batches[i],
+        stats: {
+          critical: batches[i].filter(f => f.severity === 'CRITICAL').length,
+          warning: batches[i].filter(f => f.severity === 'WARNING').length,
+          info: batches[i].filter(f => f.severity === 'INFO').length,
+        },
+      };
+      try {
+        const raw = await callLLM([
+          { role: 'system', content: BATCH_AGGREGATION_PROMPT },
+          { role: 'user', content: JSON.stringify(batchInput, null, 2) },
+        ], model, 0.4, 4096);
+        const parsed = JSON.parse(extractJSON(raw));
+        batchResults.push(parsed);
+        console.log(`Auditor:   Batch ${i + 1} done — ${parsed.top_findings?.length || 0} top findings`);
+      } catch(e) {
+        console.warn(`Auditor:   Batch ${i + 1} aggregation failed:`, e.message);
+        batchResults.push({
+          batch_summary: `Batch ${i + 1} of ${batches.length}: ${batches[i].length} findings analyzed`,
+          top_findings: batches[i].slice(0, 5),
+          signals: { key_issues: ['Failed to process batch'], strengths: [] },
+        });
+      }
+    }
+
+    // Step 2: Kimi aggregates batch summaries into final report
+    onProgress && onProgress('aggregation', 'Kimi is finalizing the report...');
+    const finalInput = {
       metadata: repoData.metadata,
       structural: structuralResult,
-      deep_findings_count: allFindings.length,
       deep_scores: aggregatedScores,
-      sample_findings: allFindings.slice(0, 10),
+      batch_count: batchResults.length,
+      total_findings: allFindings.length,
+      batch_summaries: batchResults.map(b => ({
+        summary: b.batch_summary,
+        findings_count: b.top_findings?.length || 0,
+        signals: b.signals || {},
+      })),
+      combined_findings: batchResults.flatMap(b => b.top_findings || []),
     };
 
     const aggRaw = await callLLM([
-      { role: 'system', content: AGGREGATION_SYSTEM },
-      { role: 'user', content: JSON.stringify(aggInput, null, 2) },
+      { role: 'system', content: AGGREGATION_PROMPT },
+      { role: 'user', content: JSON.stringify(finalInput, null, 2) },
     ], model, 0.4, 8192);
     finalReport = JSON.parse(extractJSON(aggRaw));
   } catch(e) {
@@ -486,6 +566,11 @@ function extractJSON(text) {
     for (let i = result.length; i > 0; i -= 4) {
       try { return JSON.parse(result.slice(0, i)); } catch(_) {}
     }
+    // Dump raw response for inspection
+    const fs = require('fs');
+    const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
+    fs.writeFileSync(dumpPath, text);
+    console.warn('Auditor: Dumped failed JSON to ' + dumpPath);
     // Nothing worked — return what we have and let caller handle the error
     throw new Error('Could not extract valid JSON from response');
   }
