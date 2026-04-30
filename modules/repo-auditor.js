@@ -457,22 +457,20 @@ async function analyzeRepo(repoData, onProgress) {
 }
 
 function extractJSON(text) {
-  // Strip markdown code fences before JSON extraction
+  // Strip markdown code fences first
   let clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  // Try each '{' from end to start — the real JSON is usually last
-  for (let i = clean.length - 1; i >= 0; i--) {
-    if (clean[i] !== '{') continue;
-    let braceCount = 1;
-    for (let j = i + 1; j < clean.length; j++) {
-      if (clean[j] === '{') braceCount++;
-      if (clean[j] === '}') braceCount--;
-      if (braceCount === 0) {
-        const candidate = clean.substring(i, j + 1);
-        try { JSON.parse(candidate); return candidate; } catch(e) { break; }
-      }
-    }
+  // Extract JSON from response — find balanced braces
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON found in response');
+  let jsonStr = jsonMatch[0];
+  // Find balanced braces (first complete pair)
+  let braceCount = 0, endIndex = 0;
+  for (let i = 0; i < jsonStr.length; i++) {
+    if (jsonStr[i] === '{') braceCount++;
+    if (jsonStr[i] === '}') braceCount--;
+    if (braceCount === 0) { endIndex = i + 1; break; }
   }
-  throw new Error('No JSON found in response');
+  return jsonStr.substring(0, endIndex);
 }
 
 // ─── PR Generation ──────────────────────────────────────────────────────────
