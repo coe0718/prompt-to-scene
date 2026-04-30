@@ -834,12 +834,31 @@ async function generateFixPR(auditResult, repoUrl) {
       // Handle intentional rejection (no viable candidate)
       if (selectorResult.selected === null || selectorResult.selected === undefined) {
         const reason = selectorResult.rejection_summary || {};
-        const msg = selectorResult.message || 'No safe first-demo PR candidate found.';
-        console.warn(`PR: Selector rejected all candidates — ${msg}`);
+        const totalFindings = auditResult.findings ? auditResult.findings.length : 0;
+        const explicitRejections = Object.values(reason).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+        console.warn(`PR: Selector rejected all candidates — ${selectorResult.message || 'no safe candidate'}`);
         if (Object.keys(reason).length) {
           console.warn('PR: Rejection breakdown:', JSON.stringify(reason));
         }
-        return { dry_run: null, message: msg, rejection_summary: reason };
+        return {
+          status: 'no_safe_candidate',
+          decision: 'No dry-run PR package generated because all candidates failed first-demo safety gates.',
+          audited_findings: totalFindings,
+          evaluated_count: selectorFindings.length,
+          explicit_rejection_count: explicitRejections,
+          selected_count: 0,
+          safety_gates: [
+            'single code file only',
+            'non-doc source change',
+            'validation command required',
+            'patch must apply',
+            'low blast radius',
+            'non-speculative finding',
+          ],
+          rejection_summary: reason,
+          human_summary: `The agent evaluated ${selectorFindings.length} findings, of which ${explicitRejections} failed explicit safety gates. No candidate met the full first-demo PR bar.`,
+          _raw: { dry_run: null, message: selectorResult.message },
+        };
       }
 
       selectedFinding = selectorFindings[selectorResult.selected.finding_index];

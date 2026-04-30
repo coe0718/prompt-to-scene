@@ -66,13 +66,21 @@ async function test() {
     console.log('Diff:     ' + dr.patch.diff_summary);
     console.log('Branch:   ' + dr.pr_draft.branch);
     console.log('Full output in data/pr-dry-run.json');
-  } else if (prResult.rejection_summary) {
-    console.log('\n=== NO SAFE PR CANDIDATE — INTENTIONAL REJECTION ===');
-    console.log('Message: ' + (prResult.message || 'No safe first-demo PR candidate found.'));
-    console.log('Breakdown:');
-    for (const [key, count] of Object.entries(prResult.rejection_summary)) {
-      if (count > 0) console.log('  - ' + key + ': ' + count + ' findings rejected');
+  } else if (prResult.status === 'no_safe_candidate') {
+    console.log('\n=== PR GENERATOR — INTENTIONAL NO-OP ===');
+    console.log('Status:   ' + prResult.status);
+    console.log('Decision: ' + prResult.decision);
+    console.log('Audited:  ' + prResult.audited_findings + ' total, ' + prResult.evaluated_count + ' evaluated');
+    console.log('Rejected: ' + prResult.explicit_rejection_count + ' by safety gates');
+    console.log('\nSafety gates:');
+    for (const gate of prResult.safety_gates) {
+      console.log('  • ' + gate);
     }
+    console.log('\nRejection breakdown:');
+    for (const [key, count] of Object.entries(prResult.rejection_summary || {})) {
+      if (count > 0) console.log('  - ' + key + ': ' + count);
+    }
+    console.log('\n' + prResult.human_summary);
     console.log('\nFull output in data/pr-dry-run.json');
   } else {
     console.log(JSON.stringify(prResult, null, 2));
