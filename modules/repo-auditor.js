@@ -688,26 +688,46 @@ async function generateFixPR(auditResult, repoUrl) {
   // ─── Step 1: Select the best finding ──────────────────────────────────
   console.log('PR: Selecting best fix candidate...');
   let selectedFinding, selectorResult;
-  try {
-    const selectorInput = {
-      repo: repoFullName,
-      total_findings: findings.length,
-      critical_count: criticalIssues.length,
-      warning_count: warnings.length,
-      findings,
-    };
-    const raw = await callLLM([
-      { role: 'system', content: PR_SELECTOR_PROMPT },
-      { role: 'user', content: JSON.stringify(selectorInput, null, 2) },
-    ], model, 0.3, 4096);
-    selectorResult = JSON.parse(extractJSON(raw));
-    selectedFinding = findings[selectorResult.selected.finding_index];
 
-    if (!selectedFinding) {
-      return { dry_run: null, error: `Selected finding index ${selectorResult.selected.finding_index} not found in findings` };
+  // Send most impactful findings only (keep input manageable)
+  const selectorFindings = [
+    ...criticalIssues,
+    ...warnings.slice(0, Math.max(0, 15 - criticalIssues.length)),
+  ];
+
+  if (selectorFindings.length === 0) {
+    return { dry_run: null, message: 'No fixable findings after filtering' };
+  }
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const selectorInput = {
+        repo: repoFullName,
+        total_findings: findings.length,
+        shown_findings: selectorFindings.length,
+        findings: selectorFindings,
+      };
+      const raw = await callLLM([
+        { role: 'system', content: PR_SELECTOR_PROMPT },
+        { role: 'user', content: JSON.stringify(selectorInput, null, 2) },
+      ], model, 0.3, 4096);
+
+      if (!raw || !raw.trim()) {
+        if (attempt === 0) { console.warn('PR: Empty selector response, retrying...'); continue; }
+        return { dry_run: null, error: 'Selector returned empty response after retry' };
+      }
+
+      selectorResult = JSON.parse(extractJSON(raw));
+      selectedFinding = findings[selectorResult.selected.finding_index];
+
+      if (!selectedFinding) {
+        return { dry_run: null, error: `Selected finding index ${selectorResult.selected.finding_index} not found in findings` };
+      }
+      break; // success
+    } catch(e) {
+      if (attempt === 0) { console.warn('PR: Selector attempt 1 failed, retrying:', e.message); continue; }
+      return { dry_run: null, error: 'Candidate selection failed: ' + e.message.slice(0, 200) };
     }
-  } catch(e) {
-    return { dry_run: null, error: 'Candidate selection failed: ' + e.message.slice(0, 200) };
   }
 
   // ─── Step 2: Fetch file content from GitHub ───────────────────────────
