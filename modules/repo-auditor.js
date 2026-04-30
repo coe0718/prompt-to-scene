@@ -103,7 +103,20 @@ function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 409
             return reject(new Error('Invalid LLM response structure'));
           }
           const msg = parsed.choices[0].message;
-          resolve(msg.content || msg.reasoning_content || '');
+          const content = msg.content;
+          if (content === undefined || content === null) {
+            // Check for alternative response formats
+            if (typeof msg === 'string') { resolve(msg); return; }
+            if (Array.isArray(msg.content)) {
+              resolve(msg.content.map(c => c.text || c.content || '').filter(Boolean).join('\n') || '');
+              return;
+            }
+            // Log the full response for debugging
+            console.warn('LLM: Unexpected response format —', JSON.stringify(parsed.choices[0]).slice(0, 500));
+            resolve('');
+          } else {
+            resolve(content);
+          }
         } catch(e) {
           reject(new Error('Failed to parse LLM response: ' + e.message));
         }
