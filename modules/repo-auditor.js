@@ -679,27 +679,23 @@ If NO candidates pass all filters, output:
 
 const PR_FIXER_PROMPT = `You are generating a surgical fix for a single code review finding.
 
-Rules:
-- Make ONLY the minimal changes needed to address the finding
-- Do NOT refactor, reformat, improve naming, or touch anything else
-- The fix must be correct and complete — no placeholders or TODOs
-- Assume the finding is legitimate. Even if the file looks clean, the issue may be subtle.
-- Output a unified diff (diff -u format) showing exactly what changed
-- The diff MUST be minimal — only the lines that need to change
-- Do NOT output the entire file. Output ONLY the diff. Large file content causes truncation.
-
-Output ONLY valid JSON. No markdown, no explanation.
+HARD RULES (violations will be rejected):
+- Do NOT output full file content ever — output ONLY a unified diff
+- Do NOT include markdown fences or any text outside the JSON
+- The diff must contain exactly ONE file
+- The diff must be a valid unified diff (diff -u format)
+- Rationale: max 3 sentences
+- Output ONLY valid JSON. No commentary, no markdown.
 
 {
-  "success": true,
-  "summary": "brief summary of what changed",
-  "diff_summary": "what lines changed and how (e.g., 'Added null check on line 42')",
-  "diff": "unified diff output showing the exact changes",
-  "verification": {
-    "test_command": "Likely test command. Infer from repo context. NEVER null unless genuinely untestable (e.g. config file change). Examples: 'npm test', 'pytest tests/', 'cargo test', 'go test ./...'",
-    "lint_command": "Likely lint/typecheck command. Infer from repo context. NEVER null. Examples: 'npm run lint', 'ruff check .', 'cargo clippy', 'gofmt -d .'",
-    "static_validation": "How to verify this fix applies cleanly. Examples: 'git apply --check fix.diff && npm test', or 'Manually review the changed line'",
-    "validation_confidence": "high|medium|low"
+  "status": "patch_generated",
+  "target_file": "path relative to repo root",
+  "rationale": "Short explanation (max 3 sentences).",
+  "unified_diff": "diff --git a/file b/file\\n--- a/file\\n+++ b/file\\n@@ -1,3 +1,4 @@\\n ...",
+  "validation": {
+    "command": "Likely test command. Infer from repo. NEVER null. Examples: 'npm test', 'pytest tests/', 'cargo test'",
+    "fallback": "Manual verification command. Examples: 'git apply --check fix.diff && npm run typecheck'",
+    "confidence": "high|medium|low"
   }
 }`;
 
@@ -924,42 +920,69 @@ async function generateFixPR(auditResult, repoUrl) {
       { role: 'system', content: PR_FIXER_PROMPT },
       { role: 'user', content: JSON.stringify(fixerInput, null, 2) },
     ], model, 0.3, 8192);
-    fixResult = JSON.parse(extractJSON(raw));
+
+    // Parse fixer output — try JSON.parse, fall through to structured failure
+    let extractedRaw;
+    try {
+      extractedRaw = extractJSON(raw);
+      fixResult = JSON.parse(extractedRaw);
+    } catch(e) {
+      return {
+        status: 'fix_generation_failed',
+        reason: 'Fixer returned unparseable output: ' + e.message.slice(0, 150),
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
+        },
+        raw_output_path: '/tmp/archiview-json-fail-' + Date.now() + '.txt',
+      };
+    }
+
+    // Crash guard: check for structured failure
+    if (!fixResult || fixResult.status !== 'patch_generated') {
+      return {
+        status: 'fix_generation_failed',
+        reason: fixResult?.reason ?? 'Fixer returned status !== patch_generated',
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
+        },
+      };
+    }
 
     // ─── Gate 3b: Post-fixer validation check ───────────────────────────
-    const ver = fixResult.verification || {};
-    if (!ver.test_command && !ver.lint_command && !ver.static_validation) {
+    const ver = fixResult.validation || {};
+    if (!ver.command && !ver.fallback) {
       return {
-        dry_run: {
-          selected_finding: {
-            severity: selectedFinding.severity,
-            file: selectedFinding.file,
-            title: selectedFinding.title,
-            fix_summary: selectorResult.selected.fix_summary,
-            confidence: selectorResult.confidence,
-          },
-          original_content: fileContent.slice(0, 2000) + '\n\n... (truncated)',
-          patch: null,
-          error: 'Validation confidence too low: no test, lint, or static validation commands produced',
+        status: 'fix_generation_failed',
+        reason: 'Validation confidence too low: no validation command or fallback produced',
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
         },
-        message: 'Fix generated but rejected — no validation commands to verify correctness',
       };
     }
     // If no diff was produced, the fixer didn't actually change anything
-    if (!fixResult.diff || fixResult.diff.trim().length === 0) {
+    if (!fixResult.unified_diff || fixResult.unified_diff.trim().length === 0) {
       return {
-        dry_run: {
-          selected_finding: {
-            severity: selectedFinding.severity,
-            file: selectedFinding.file,
-            title: selectedFinding.title,
-            fix_summary: selectorResult.selected.fix_summary,
-            confidence: selectorResult.confidence,
-          },
-          patch: null,
-          error: 'Fixer returned no diff — no fix applied',
+        status: 'fix_generation_failed',
+        reason: 'Fixer returned no unified_diff — no fix applied',
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
         },
-        message: 'Fix output matches original — likely no issue to fix in this file',
       };
     }
   } catch(e) {
@@ -1003,18 +1026,18 @@ async function generateFixPR(auditResult, repoUrl) {
     patch: {
       file: selectedFinding.file,
       change_type: 'modify',
-      summary: fixResult.summary,
-      diff_summary: fixResult.diff_summary,
+      rationale: fixResult.rationale || '',
+      unified_diff: fixResult.unified_diff || '',
       original_content_preview: fileContent.slice(0, 500) + (fileContent.length > 500 ? '\n...' : ''),
-      diff_preview: (fixResult.diff || '').slice(0, 500) + ((fixResult.diff || '').length > 500 ? '\n...' : ''),
+      diff_preview: (fixResult.unified_diff || '').slice(0, 500) + ((fixResult.unified_diff || '').length > 500 ? '\n...' : ''),
     },
-    validation: fixResult.verification || { test_command: null, lint_command: null, static_validation: null, validation_confidence: 'low' },
+    validation: fixResult.validation || { command: null, fallback: null, confidence: 'low' },
     pr_draft: {
       title: `fix: ${selectedFinding.title.slice(0, 60)}`,
       body: [
         `## Description`,
         ``,
-        fixResult.summary || selectedFinding.description,
+        fixResult.rationale || selectedFinding.description,
         ``,
         `**Finding:** ${selectedFinding.severity} — ${selectedFinding.title}`,
         `**File:** \`${selectedFinding.file}\``,
@@ -1022,7 +1045,7 @@ async function generateFixPR(auditResult, repoUrl) {
         `## Risk Assessment`,
         ``,
         `- **Blast radius:** Single file, single concern`,
-        `- **Change type:** Surgical fix (${fixResult.diff_summary || 'minimal change'})`,
+        `- **Change type:** Surgical fix — ${(fixResult.rationale || 'minimal change').slice(0, 120)}`,
         `- **Breaking potential:** Low — narrow scope, well-defined fix`,
         ``,
         `## Validation`,
@@ -1033,10 +1056,9 @@ async function generateFixPR(auditResult, repoUrl) {
   };
 
   // Add validation section
-  const v = fixResult.verification || {};
-  if (v.test_command) dryRun.pr_draft.body += `- **Test:** \`${v.test_command}\`\n`;
-  if (v.lint_command) dryRun.pr_draft.body += `- **Lint:** \`${v.lint_command}\`\n`;
-  if (v.static_sanity) dryRun.pr_draft.body += `- **Sanity check:** ${v.static_sanity}\n`;
+  const v = fixResult.validation || {};
+  if (v.command) dryRun.pr_draft.body += `- **Test:** \`${v.command}\`\n`;
+  if (v.fallback) dryRun.pr_draft.body += `- **Fallback:** ${v.fallback}\n`;
   dryRun.pr_draft.body += `\n---\n*Generated by Archiview · Autonomous AI Audit*\n`;
 
   return {

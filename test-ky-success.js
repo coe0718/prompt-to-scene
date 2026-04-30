@@ -51,8 +51,7 @@ async function run() {
     console.log('Selected: ' + dr.selected_finding.title + ' (' + dr.selected_finding.severity + ')');
     console.log('File:     ' + dr.selected_finding.file);
     if (dr.patch) {
-      console.log('Patch:    ' + (dr.patch.summary || '(no summary)'));
-      console.log('Diff:     ' + (dr.patch.diff_summary || '(no diff)'));
+      console.log('Rationale: ' + (dr.patch.rationale || '(no rationale)'));
       if (dr.patch.diff_preview) console.log('Diff preview:\n' + dr.patch.diff_preview);
       console.log('Branch:   ' + dr.pr_draft.branch);
       console.log('Validation: ' + JSON.stringify(dr.validation, null, 2));
@@ -73,7 +72,17 @@ async function run() {
       if (count > 0) console.log('  - ' + key + ': ' + count);
     }
     console.log('\n' + prResult.human_summary);
-    console.log('\nFull output in data/ky-pr-result.json');
+    console.log('\nFull output in data/ky-pr-source-first.json');
+  } else if (prResult.status === 'fix_generation_failed') {
+    console.log('\n=== PR GENERATOR — FIX GENERATION FAILED (sindresorhus/ky) ===');
+    console.log('Status:   ' + prResult.status);
+    console.log('Reason:   ' + prResult.reason);
+    if (prResult.selected_finding) {
+      console.log('File:     ' + prResult.selected_finding.file);
+      console.log('Finding:  ' + prResult.selected_finding.title);
+    }
+    if (prResult.raw_output_path) console.log('Raw output: ' + prResult.raw_output_path);
+    console.log('\nFull output in data/ky-pr-source-first.json');
   } else {
     console.log('\n' + JSON.stringify(prResult, null, 2));
   }
