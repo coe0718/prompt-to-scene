@@ -452,7 +452,7 @@ async function analyzeRepo(repoData, onProgress) {
         const raw = await callLLM([
           { role: 'system', content: BATCH_AGGREGATION_PROMPT },
           { role: 'user', content: JSON.stringify(batchInput, null, 2) },
-        ], model, 0.4, 4096);
+        ], model, 0.4, 8192);
         const parsed = JSON.parse(extractJSON(raw));
         batchResults.push(parsed);
         console.log(`Auditor:   Batch ${i + 1} done — ${parsed.top_findings?.length || 0} top findings`);
@@ -543,7 +543,13 @@ function extractJSON(text) {
   let clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   // Extract JSON from response — find balanced braces
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON found in response');
+  if (!jsonMatch) {
+    const fs = require('fs');
+    const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
+    fs.writeFileSync(dumpPath, text);
+    console.warn('Auditor: Dumped no-JSON response to ' + dumpPath);
+    throw new Error('No JSON found in response');
+  }
   let jsonStr = jsonMatch[0];
   // Find balanced braces (first complete pair)
   let braceCount = 0, endIndex = 0;
