@@ -551,7 +551,7 @@ function extractJSON(text) {
       // Try trailing comma fix + progressive truncation
       const fixed = partial.replace(/,(\s*[}\]])/g, '$1');
       try { return JSON.parse(fixed); } catch(_) {}
-      for (let i = fixed.length; i > 0; i -= 8) {
+      for (let i = fixed.length; i >= 0; i--) {
         try { return JSON.parse(fixed.slice(0, i)); } catch(_) {}
       }
     }
@@ -580,7 +580,7 @@ function extractJSON(text) {
     result = result.replace(/,(\s*[}\]])/g, '$1');
     try { JSON.parse(result); return result; } catch(_) {}
     // Attempt 2: strip trailing characters until JSON parses
-    for (let i = result.length; i > 0; i -= 4) {
+    for (let i = result.length; i >= 0; i--) {
       try { return JSON.parse(result.slice(0, i)); } catch(_) {}
     }
     // Dump raw response for inspection
