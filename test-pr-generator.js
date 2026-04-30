@@ -70,8 +70,10 @@ async function test() {
     console.log('\n=== PR GENERATOR — INTENTIONAL NO-OP ===');
     console.log('Status:   ' + prResult.status);
     console.log('Decision: ' + prResult.decision);
-    console.log('Audited:  ' + prResult.audited_findings + ' total, ' + prResult.evaluated_count + ' evaluated');
-    console.log('Rejected: ' + prResult.explicit_rejection_count + ' by safety gates');
+    console.log('Audited:  ' + prResult.audited_findings + ' total findings');
+    console.log('Evaluated: ' + prResult.evaluated_count + ' candidate findings');
+    console.log('Rejected: ' + prResult.explicit_rejection_count + ' total safety-gate failures across evaluated candidates');
+    console.log('Selected: ' + prResult.selected_count);
     console.log('\nSafety gates:');
     for (const gate of prResult.safety_gates) {
       console.log('  • ' + gate);

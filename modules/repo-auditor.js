@@ -856,7 +856,7 @@ async function generateFixPR(auditResult, repoUrl) {
             'non-speculative finding',
           ],
           rejection_summary: reason,
-          human_summary: `The agent evaluated ${selectorFindings.length} findings, of which ${explicitRejections} failed explicit safety gates. No candidate met the full first-demo PR bar.`,
+          human_summary: `The agent audited ${totalFindings} findings and deeply evaluated ${selectorFindings.length} candidate findings. Those candidates triggered ${explicitRejections} total safety-gate failures across categories. No candidate met the full first-demo PR bar.`,
           _raw: { dry_run: null, message: selectorResult.message },
         };
       }
