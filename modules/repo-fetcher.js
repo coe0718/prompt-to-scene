@@ -3,6 +3,10 @@
  *
  * Fetches repo metadata, directory tree, and key file contents
  * via the GitHub REST API. No authentication needed for public repos.
+ *
+ * Modes:
+ *   balanced    — Prioritize docs + config for general repo understanding (default)
+ *   source-first — Prioritize source code files for PR generation (demo-friendly)
  */
 
 const https = require('https');
@@ -42,6 +46,11 @@ const SKIP_PATHS = new Set([
 // Directories to prioritize (look here first)
 const PRIORITY_DIRS = ['src', 'lib', 'app', 'core', 'api', 'routes', 'controllers', 'models', 'services', 'utils', 'components', 'pages'];
 
+// Source-first: directories that get max priority boost
+const SOURCE_FIRST_DIRS = ['src', 'lib', 'app', 'packages', 'crates'];
+const SOURCE_EXTS = new Set(['.js', '.ts', '.py', '.rs', '.go', '.rb', '.java', '.c', '.cpp', '.h', '.hpp', '.jsx', '.tsx', '.vue', '.svelte']);
+const TEST_EXTS = new Set(['.test.js', '.test.ts', '.spec.js', '.spec.ts', '.test.py']);
+
 function githubFetch(path) {
   return new Promise((resolve, reject) => {
     const url = GITHUB_API + path;
@@ -73,28 +82,49 @@ function isImportantFile(path) {
   return PRIORITY_EXTS.has(ext) || PRIORITY_EXTS.has('.' + name.split('.').pop());
 }
 
-function getImportance(path) {
-  // Score files by importance for prioritization
+function getImportance(path, mode) {
   let score = 0;
   const name = path.split('/').pop();
   const ext = '.' + name.split('.').pop();
 
-  // README and config files are most important
-  if (name === 'README.md') score += 100;
-  if (ALWAYS_INCLUDE.has(name)) score += 80;
+  if (mode === 'source-first') {
+    // ─── Source-first scoring ────────────────────────────────────
+    // Source code in priority directories gets top scores
+    const topDir = path.split('/')[0];
+    const fullPath = path.toLowerCase();
 
-  // Priority directories
-  const dir = path.split('/')[0];
-  if (PRIORITY_DIRS.includes(dir)) score += 40;
+    // HARD penalize generated/vendor/docs
+    if (/\.mdx?$|\.txt$|\.rst$/.test(ext)) score -= 100;
+    if (name.includes('lock') || name.includes('bundle') || name.includes('chunk')) score -= 999;
+    if (/^docs\//.test(fullPath) || /^examples\//.test(fullPath)) score -= 100;
 
-  // Source code over other files
-  if (['.js', '.ts', '.py', '.rs', '.go', '.rb', '.java'].includes(ext)) score += 30;
-  if (['.jsx', '.tsx', '.vue', '.svelte'].includes(ext)) score += 25;
-  if (['.json', '.yaml', '.yml', '.toml'].includes(ext)) score += 20;
-  if (['.md', '.rst'].includes(ext)) score += 10;
+    // Source files in priority directories (src/, lib/, app/, packages/, crates/)
+    if (SOURCE_FIRST_DIRS.includes(topDir) && SOURCE_EXTS.has(ext)) score += 100;
+    // Source files anywhere
+    if (SOURCE_EXTS.has(ext) && !fullPath.includes('/test') && !fullPath.includes('.test.')) score += 80;
+    // Test files (lower priority but still wanted)
+    if (TEST_EXTS.has(ext) || fullPath.includes('/test/') || fullPath.includes('__tests__/')) score += 40;
+    // Config / build files
+    if (['.json', '.yaml', '.yml', '.toml', '.sh'].includes(ext)) score += 20;
+    // README — include at most 1 (score low so it comes last among code)
+    if (name === 'README.md' || name === 'CONTRIBUTING.md') score += 10;
+    // LICENSE — barely count
+    if (name === 'LICENSE') score += 1;
+  } else {
+    // ─── Balanced scoring (default, original behavior) ───────────
+    if (name === 'README.md') score += 100;
+    if (ALWAYS_INCLUDE.has(name)) score += 80;
 
-  // Penalize very large generated files
-  if (name.includes('lock') || name.includes('bundle') || name.includes('chunk')) score -= 50;
+    const dir = path.split('/')[0];
+    if (PRIORITY_DIRS.includes(dir)) score += 40;
+
+    if (['.js', '.ts', '.py', '.rs', '.go', '.rb', '.java'].includes(ext)) score += 30;
+    if (['.jsx', '.tsx', '.vue', '.svelte'].includes(ext)) score += 25;
+    if (['.json', '.yaml', '.yml', '.toml'].includes(ext)) score += 20;
+    if (['.md', '.rst'].includes(ext)) score += 10;
+
+    if (name.includes('lock') || name.includes('bundle') || name.includes('chunk')) score -= 50;
+  }
 
   return score;
 }
@@ -108,7 +138,6 @@ function shouldSkip(path) {
 }
 
 function parseRepoUrl(url) {
-  // Accept: user/repo, github.com/user/repo, https://github.com/user/repo, etc.
   const match = url.match(/(?:github\.com\/)?([^\/\s]+)\/([^\/\s#?]+)/);
   if (!match) throw new Error('Invalid GitHub URL: ' + url);
   return { owner: match[1].replace(/^@/, ''), repo: match[2].replace(/\.git$/, '') };
@@ -117,80 +146,50 @@ function parseRepoUrl(url) {
 async function fetchRepo(repoUrl, options = {}) {
   const { owner, repo } = parseRepoUrl(repoUrl);
   const maxFiles = options.maxFiles || 60;
+  const mode = options.mode || 'balanced';
 
   // Step 1: Get repo metadata
   const meta = await githubFetch(`/repos/${owner}/${repo}`);
-  console.log(`Fetched metadata: ${meta.full_name} (${meta.stargazers_count}⭐, ${meta.language || 'unknown'})`);
 
-  // Step 2: Get the default branch's recursive tree
-  const branch = meta.default_branch || 'main';
+  // Step 2: Get tree (full recursive)
+  const treeData = await githubFetch(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
 
-  // Step 2: Get the recursive tree via Git Trees API
-  const treeData = await githubFetch(`/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`);
-
-  // Step 3: Filter and score files
-  const files = (treeData.tree || [])
-    .filter(item => item.type === 'blob')
-    .filter(item => !shouldSkip(item.path))
-    .filter(item => isImportantFile(item.path))
+  // Step 3: Filter and prioritize files
+  const files = treeData.tree
+    .filter(item => item.type === 'blob' && isImportantFile(item.path) && !shouldSkip(item.path))
     .map(item => ({
       path: item.path,
-      size: item.size || 0,
       sha: item.sha,
-      importance: getImportance(item.path),
+      importance: getImportance(item.path, mode),
     }))
     .sort((a, b) => b.importance - a.importance)
     .slice(0, maxFiles);
 
   console.log(`Found ${files.length} important files (of ${treeData.tree?.length || 0} total)`);
 
-  // Step 4: Fetch file contents (in parallel, but rate-limited)
-  const fileContents = [];
-  const batchSize = 5;
-  for (let i = 0; i < files.length; i += batchSize) {
-    const batch = files.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map(f =>
-        githubFetch(`/repos/${owner}/${repo}/contents/${f.path}?ref=${branch}`)
-          .then(data => ({
-            path: f.path,
-            content: Buffer.from(data.content || '', 'base64').toString('utf-8'),
-            size: data.size || f.size,
-            encoding: data.encoding || 'base64',
-            html_url: data.html_url || '',
-          }))
-          .catch(err => ({ path: f.path, error: err.message }))
-      )
-    );
-    for (const r of results) {
-      if (r.status === 'fulfilled') fileContents.push(r.value);
+  // Step 4: Fetch file contents
+  for (const file of files) {
+    try {
+      const content = await githubFetch(`/repos/${owner}/${repo}/contents/${file.path}`);
+      file.content = Buffer.from(content.content, 'base64').toString('utf-8');
+    } catch(e) {
+      console.warn(`  Failed to fetch ${file.path}: ${e.message.slice(0, 100)}`);
+      file.content = '(unavailable)';
     }
-    // Small delay between batches to avoid rate limiting
-    if (i + batchSize < files.length) await new Promise(r => setTimeout(r, 200));
   }
-
-  console.log(`Fetched ${fileContents.length} file contents`);
 
   return {
     metadata: {
-      name: meta.name,
       full_name: meta.full_name,
       description: meta.description,
       language: meta.language,
       stars: meta.stargazers_count,
       forks: meta.forks_count,
-      open_issues: meta.open_issues_count,
-      default_branch: branch,
       topics: meta.topics || [],
-      created_at: meta.created_at,
-      updated_at: meta.updated_at,
-      html_url: meta.html_url,
-      license: meta.license?.spdx_id || null,
     },
-    files: fileContents,
-    total_files: treeData.tree?.length || 0,
-    analyzed_files: fileContents.length,
+    total_files: treeData.tree.filter(i => i.type === 'blob').length,
+    files: files.map(f => ({ path: f.path, content: f.content })),
   };
 }
 
-module.exports = { fetchRepo, parseRepoUrl };
+module.exports = { fetchRepo };
