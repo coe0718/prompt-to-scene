@@ -564,41 +564,84 @@ async function analyzeRepo(repoData, onProgress) {
 
 function extractJSON(text) {
   // Strip markdown code fences first
-  let clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  // Extract JSON from response — find balanced braces
-  const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    // No closing brace found — try truncation salvage from first {
-    const firstBrace = clean.indexOf('{');
-    if (firstBrace >= 0) {
-      const partial = clean.slice(firstBrace);
-      // Try trailing comma fix + progressive truncation
-      const fixed = partial.replace(/,(\s*[}\]])/g, '$1');
-      try { JSON.parse(fixed); return fixed; } catch(_) {}
-      for (let i = fixed.length; i >= 0; i--) {
-        try { JSON.parse(fixed.slice(0, i)); return fixed.slice(0, i); } catch(_) {}
-      }
-    }
+  let clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // Find the first opening brace
+  const jsonStart = clean.indexOf('{');
+  if (jsonStart < 0) {
     const fs = require('fs');
     const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
     fs.writeFileSync(dumpPath, text);
     console.warn('Auditor: Dumped no-JSON response to ' + dumpPath);
     throw new Error('No JSON found in response');
   }
-  let jsonStr = jsonMatch[0];
 
-  // FIRST: try parsing the full match — JSON.parse correctly handles braces
-  // inside string values, unlike naive brace counting.
-  try { JSON.parse(jsonStr); return jsonStr; } catch(_) {}
+  // Scan for balanced braces character-by-character (handles strings, escapes)
+  // Record the last position where brace depth returns to 0 — that's the true end of JSON
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let lastBalancedEnd = -1;
 
-  // Full parse failed — likely truncated. Try progressively shorter strings
-  // from the end until JSON.parse succeeds. This handles mid-string truncation
-  // where no balanced brace pair exists in the output.
-  for (let i = jsonStr.length - 1; i >= 0; i--) {
-    const candidate = jsonStr.slice(0, i + 1).replace(/,\s*([}\]])/g, '$1');
-    try { JSON.parse(candidate); return candidate; } catch(_) {}
+  for (let i = jsonStart; i < clean.length; i++) {
+    const ch = clean[i];
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === '\\') { escape = true; }
+      else if (ch === '"') { inString = false; }
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') { depth++; continue; }
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        lastBalancedEnd = i;
+      }
+      continue;
+    }
   }
-  // Dump raw response for inspection
+
+  // Case 1: Found a complete balanced JSON object
+  if (lastBalancedEnd >= 0) {
+    let candidate = clean.slice(jsonStart, lastBalancedEnd + 1);
+    // Remove trailing comma before boundry if present
+    candidate = candidate.replace(/,\s*$/, '');
+    // Verify it parses
+    try { JSON.parse(candidate); return candidate; } catch(_) {}
+    // Try progressive truncation from balanced end
+    for (let i = candidate.length - 1; i >= 0; i--) {
+      try { JSON.parse(candidate.slice(0, i + 1)); return candidate.slice(0, i + 1); } catch(_) {}
+    }
+  }
+
+  // Case 2: Truncated JSON (depth never returned to 0).
+  // The greedy match gives us first { to last }, but may include unclosed structures.
+  // Try appending closing } and ] to match the remaining depth.
+  const rest = clean.slice(jsonStart);
+  // Count remaining unclosed braces from the depth state
+  // depth > 0 means we need that many } to close
+  let closers = '';
+  for (let i = 0; i < depth; i++) closers += '}';
+  if (closers) {
+    try { const fixed = rest + closers; JSON.parse(fixed); return fixed; } catch(_) {}
+    // Try with ] prepended to close arrays first
+    try { const fixed = rest + ']' + closers; JSON.parse(fixed); return fixed; } catch(_) {}
+  }
+
+  // Case 3: Greedy regex fallback — try from first { to last }
+  const greedyMatch = rest.match(/\{[\s\S]*\}/);
+  if (greedyMatch) {
+    let jsonStr = greedyMatch[0];
+    try { JSON.parse(jsonStr); return jsonStr; } catch(_) {}
+    // Greedy regex may over-capture (includes unclosed arrays). Try appending closers.
+    const suffixes = [']}', ']}', '}}', ']]}', ']}}', '}]]', '}}]', ']]]}', ']}}]', ']]}'];
+    for (const suffix of suffixes) {
+      try { JSON.parse(jsonStr + suffix); return jsonStr + suffix; } catch(_) {}
+    }
+  }
+
+  // Dump and throw
   const fs = require('fs');
   const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
   fs.writeFileSync(dumpPath, text);
