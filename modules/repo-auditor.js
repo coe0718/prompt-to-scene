@@ -24,6 +24,17 @@ const LLM_ENDPOINTS = {
       'X-Title': 'Archiview',
     }),
   },
+  kimi26: {
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'moonshotai/kimi-k2.6',
+    key: () => process.env.OPENROUTER_API_KEY || '',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+      'HTTP-Referer': 'https://repo-audit.local',
+      'X-Title': 'Archiview',
+    }),
+  },
   kimi: {
     url: 'https://integrate.api.nvidia.com/v1/chat/completions',
     model: 'moonshotai/kimi-k2.5',
@@ -50,6 +61,7 @@ function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 409
   const key = config.key();
   if (!key && (model === 'kimi' || model === 'fast')) throw new Error('NVIDIA_API_KEY not set');
   if (!key && model === 'minimax') throw new Error('OPENROUTER_API_KEY not set');
+  // kimi26, minimax all use OPENROUTER_API_KEY — already checked above
 
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
@@ -242,9 +254,9 @@ function chunkFiles(files, maxChunkSize = 6000) {
 
 async function analyzeRepo(repoData, onProgress) {
   const startTime = Date.now();
-  // Prefer NVIDIA (confirmed working), fall back to OpenRouter
-  const model = process.env.NVIDIA_API_KEY ? 'kimi' : (process.env.OPENROUTER_API_KEY ? 'minimax' : null);
-  if (!model) throw new Error('No LLM API key configured. Set NVIDIA_API_KEY or OPENROUTER_API_KEY.');
+  // Prefer Kimi K2.6 via OpenRouter, fall back to NVIDIA Kimi K2.5 (EOL)
+  const model = process.env.OPENROUTER_API_KEY ? 'kimi26' : (process.env.NVIDIA_API_KEY ? 'kimi' : null);
+  if (!model) throw new Error('No LLM API key configured. Set OPENROUTER_API_KEY or NVIDIA_API_KEY.');
   console.log(`Auditor: Starting analysis (model: ${model})`);
 
   // ─── Pass 1: Structural Analysis ──────────────────────────────────────
@@ -491,7 +503,7 @@ async function generateFixPR(auditResult, repoUrl) {
   };
 
   try {
-    const model = process.env.NVIDIA_API_KEY ? 'kimi' : 'minimax';
+    const model = process.env.OPENROUTER_API_KEY ? 'kimi26' : (process.env.NVIDIA_API_KEY ? 'kimi' : 'minimax');
     const raw = await callLLM([
       { role: 'system', content: PR_GENERATION_PROMPT },
       { role: 'user', content: JSON.stringify(context, null, 2) },
