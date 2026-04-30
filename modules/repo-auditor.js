@@ -109,9 +109,9 @@ function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 409
         }
       });
     });
-    req.setTimeout(300000, () => {
+    req.setTimeout(600000, () => {
       req.destroy();
-      reject(new Error('LLM request timed out after 300s'));
+      reject(new Error('LLM request timed out after 600s'));
     });
     req.on('error', reject);
     req.write(body);

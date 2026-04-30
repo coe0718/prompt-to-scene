@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit Report: NousResearch/hermes-agent</title>
+<style>
+  :root {
+    --bg: #080b14;
+    --surface: rgba(255,255,255,0.04);
+    --surface2: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --muted: #8892a4;
+    --accent: #7c5cfc;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --cyan: #22d3ee;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  .header {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    background: rgba(124,92,252,0.15); border: 1px solid rgba(124,92,252,0.3);
+    font-size: 0.72rem; color: var(--accent); letter-spacing: 0.06em;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  .header h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; }
+  .header .repo-meta { color: var(--muted); font-size: 0.9rem; }
+  .header .repo-meta span { margin-right: 16px; }
+  .header .summary { margin-top: 16px; font-size: 0.95rem; color: rgba(255,255,255,0.8); max-width: 700px; }
+
+  /* Score Dashboard */
+  .dashboard { padding: 32px 0; }
+  .dashboard h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 20px; }
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+  }
+  .score-card {
+    padding: 20px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .score-card .score-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+  .score-card .score-number {
+    font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em;
+  }
+  .score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .score-label { width: 130px; font-size: 0.85rem; color: var(--muted); flex-shrink: 0; }
+  .score-bar-bg { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .score-bar { height: 100%; border-radius: 4px; width: 0; transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+  .score-val { width: 30px; text-align: right; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+
+  /* Architecture */
+  .arch-section { padding: 32px 0; border-top: 1px solid var(--border); }
+  .arch-section h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+  .arch-card {
+    padding: 20px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .arch-card h3 { font-size: 0.9rem; font-weight: 600; color: var(--accent); margin-bottom: 8px; }
+  .arch-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.7; }
+  .arch-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .arch-tag {
+    padding: 3px 10px; border-radius: 99px;
+    background: rgba(124,92,252,0.1); border: 1px solid rgba(124,92,252,0.2);
+    font-size: 0.75rem; color: var(--accent);
+  }
+
+  /* Findings */
+  .findings-section { padding: 32px 0; border-top: 1px solid var(--border); }
+  .findings-section h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+  .findings-count {
+    display: flex; gap: 16px; margin-bottom: 20px;
+  }
+  .findings-count .count-item {
+    padding: 8px 16px; border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .finding {
+    padding: 16px; border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+  .finding-header { display: flex; gap: 12px; margin-bottom: 6px; font-size: 0.75rem; }
+  .finding-severity { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .finding-category { color: var(--muted); }
+  .finding-file { color: var(--muted); margin-left: auto; font-family: monospace; }
+  .finding-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+  .finding-desc { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+  .finding-suggestion { font-size: 0.82rem; color: var(--cyan); margin-top: 6px; padding: 6px 10px; background: rgba(34,211,238,0.06); border-radius: 4px; }
+
+  /* Recommendations */
+  .recs-section { padding: 32px 0; border-top: 1px solid var(--border); }
+  .recs-section h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+  .rec {
+    padding: 14px 16px; border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    margin-bottom: 8px;
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .rec-priority { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; white-space: nowrap; width: 70px; flex-shrink: 0; }
+  .rec-action { flex: 1; font-size: 0.88rem; }
+  .rec-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+  /* Strengths & Risks */
+  .sr-section { padding: 32px 0; border-top: 1px solid var(--border); }
+  .sr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .sr-box { padding: 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+  .sr-box h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; }
+  .sr-box li { font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; list-style: none; }
+  .sr-box .risk { color: var(--red); }
+
+  /* Stats */
+  .stats-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .stat-chip {
+    padding: 4px 12px; border-radius: 99px;
+    background: var(--surface); border: 1px solid var(--border);
+    font-size: 0.78rem; color: var(--muted);
+  }
+
+  /* Radar Chart */
+  .radar-section { padding: 20px 0; text-align: center; border-top: 1px solid var(--border); }
+  .radar-section svg { max-width: 360px; height: auto; }
+
+  /* Footer */
+  .footer {
+    padding: 32px 0; border-top: 1px solid var(--border);
+    text-align: center; font-size: 0.82rem; color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .sr-grid { grid-template-columns: 1fr; }
+    .score-grid { grid-template-columns: 1fr; }
+    .rec { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="badge">🤖 Archiview</div>
+    <h1>NousResearch/hermes-agent</h1>
+    <div class="repo-meta">
+      <span>⭐ 126146</span>
+      <span>🔤 Python</span>
+      <span>📁 10 files analyzed</span>
+      <span>📐 847 lines</span>
+    </div>
+    <div class="summary">Analysis of NousResearch/hermes-agent — Python project, 10 files analyzed.</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <span class="stat-chip" style="color:var(--red);border-color:rgba(248,113,113,0.2);background:rgba(248,113,113,0.06);">🔴 1 critical</span>
+    <span class="stat-chip" style="color:var(--amber);border-color:rgba(251,191,36,0.2);background:rgba(251,191,36,0.06);">🟡 9 warnings</span>
+    <span class="stat-chip" style="color:var(--cyan);border-color:rgba(34,211,238,0.2);background:rgba(34,211,238,0.06);">🔵 18 info</span>
+    <span class="stat-chip">⏱ 386s</span>
+  </div>
+
+  <!-- Scores -->
+  <div class="dashboard">
+    <h2>Score Dashboard</h2>
+    <div style="padding:8px 0;">
+      
+    <div class="score-row">
+      <div class="score-label">Architecture</div>
+      <div class="score-bar-bg">
+        <div class="score-bar" data-width="54" style="background:#fb923c"></div>
+      </div>
+      <div class="score-val">54</div>
+    </div>
+      
+    <div class="score-row">
+      <div class="score-label">Code Quality</div>
+      <div class="score-bar-bg">
+        <div class="score-bar" data-width="74" style="background:#fbbf24"></div>
+      </div>
+      <div class="score-val">74</div>
+    </div>
+      
+    <div class="score-row">
+      <div class="score-label">Security</div>
+      <div class="score-bar-bg">
+        <div class="score-bar" data-width="70" style="background:#fbbf24"></div>
+      </div>
+      <div class="score-val">70</div>
+    </div>
+      
+    <div class="score-row">
+      <div class="score-label">Documentation</div>
+      <div class="score-bar-bg">
+        <div class="score-bar" data-width="68" style="background:#fbbf24"></div>
+      </div>
+      <div class="score-val">68</div>
+    </div>
+      
+    <div class="score-row">
+      <div class="score-label">Maintainability</div>
+      <div class="score-bar-bg">
+        <div class="score-bar" data-width="67" style="background:#fbbf24"></div>
+      </div>
+      <div class="score-val">67</div>
+    </div>
+      
+    <div class="score-row">
+      <div class="score-label">Overall</div>
+      <div class="score-bar-bg">
+        <div class="score-bar" data-width="67" style="background:#7c5cfc"></div>
+      </div>
+      <div class="score-val">67</div>
+    </div>
+    </div>
+  </div>
+
+  <!-- Radar Chart -->
+  <div class="radar-section">
+    <div style="display:inline-block;padding:16px;">
+      <div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Health Radar</div>
+      <svg width="360" height="380" viewBox="0 0 360 380" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="180,152 206.6295824562643,171.34752415750148 196.45798706418924,202.65247584249852 163.54201293581076,202.65247584249852 153.3704175437357,171.34752415750148" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><polygon points="180,124 233.2591649125286,162.69504831500294 212.91597412837848,225.30495168499706 147.08402587162152,225.30495168499706 126.7408350874714,162.69504831500296" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><polygon points="180,96 259.8887473687929,154.04257247250442 229.37396119256775,247.95742752749558 130.62603880743228,247.95742752749558 100.1112526312071,154.04257247250442" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><polygon points="180,68 286.5183298250572,145.3900966300059 245.831948256757,270.60990336999413 114.16805174324303,270.60990336999413 73.48167017494279,145.3900966300059" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><polygon points="180,40 313.1479122813215,136.73762078750735 262.28993532094626,293.26237921249265 97.71006467905377,293.26237921249265 46.85208771867849,136.73762078750738" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+        <line x1="180" y1="180" x2="180" y2="40" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="180" y1="180" x2="313.1479122813215" y2="136.73762078750735" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="180" y1="180" x2="262.28993532094626" y2="293.26237921249265" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="180" y1="180" x2="97.71006467905377" y2="293.26237921249265" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="180" y1="180" x2="46.85208771867849" y2="136.73762078750738" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <polygon points="180,104.39999999999999 278.5294550881779,147.98583938275544 237.60295472466237,259.28366544874484 124.04284398175656,257.018417864495 90.79089877151458,151.01420592762994" fill="#fbbf24" fill-opacity="0.2" stroke="#fbbf24" stroke-width="2"/>
+        <circle cx="180" cy="104.39999999999999" r="4" fill="#fbbf24" stroke="#06060e" stroke-width="2"/><circle cx="278.5294550881779" cy="147.98583938275544" r="4" fill="#fbbf24" stroke="#06060e" stroke-width="2"/><circle cx="237.60295472466237" cy="259.28366544874484" r="4" fill="#fbbf24" stroke="#06060e" stroke-width="2"/><circle cx="124.04284398175656" cy="257.018417864495" r="4" fill="#fbbf24" stroke="#06060e" stroke-width="2"/><circle cx="90.79089877151458" cy="151.01420592762994" r="4" fill="#fbbf24" stroke="#06060e" stroke-width="2"/>
+        <text x="180" y="18" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">Architecture</text><text x="334.07115563981483" y="129.93924691125852" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">Code Quality</text><text x="275.22121087138066" y="311.0607530887415" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">Security</text><text x="84.77878912861937" y="311.0607530887415" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">Documentation</text><text x="25.92884436018511" y="129.93924691125855" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">Maint'ability</text>
+        <text x="180" y="88.39999999999999" text-anchor="middle" dominant-baseline="middle" fill="#fb923c" font-size="11" font-weight="600" font-family="Inter,sans-serif">54</text><text x="293.74635934890034" y="143.0415674727563" text-anchor="middle" dominant-baseline="middle" fill="#fbbf24" font-size="11" font-weight="600" font-family="Inter,sans-serif">74</text><text x="247.00751876134194" y="272.22793735874404" text-anchor="middle" dominant-baseline="middle" fill="#fbbf24" font-size="11" font-weight="600" font-family="Inter,sans-serif">70</text><text x="114.638279945077" y="269.96268977449415" text-anchor="middle" dominant-baseline="middle" fill="#fbbf24" font-size="11" font-weight="600" font-family="Inter,sans-serif">68</text><text x="75.57399451079212" y="146.06993401763077" text-anchor="middle" dominant-baseline="middle" fill="#fbbf24" font-size="11" font-weight="600" font-family="Inter,sans-serif">67</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Verdict -->
+  <div style="padding:20px;border-radius:12px;background:rgba(124,92,252,0.06);border:1px solid rgba(124,92,252,0.2);margin-bottom:16px;">
+    <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent);margin-bottom:6px;">Verdict</div>
+    <div style="font-size:1rem;color:rgba(255,255,255,0.9);">NousResearch/hermes-agent is a concerning codebase. Critical issues need immediate attention.</div>
+  </div>
+
+  <!-- Architecture -->
+  <div class="arch-section">
+    <h2>Architecture</h2>
+    <div class="arch-card">
+      <h3>Overview</h3>
+      <p>Hermes Agent is a self-improving Python AI agent framework featuring a plugin-based architecture, multi-platform gateway supporting Telegram/Discord/CLI/etc., and a closed learning loop with autonomous skill creation and persistent memory. It unifies access to 200+ LLM providers and can spawn isolated subagents for parallel execution. The codebase is organized into modular plugins, deployment environments, optional skills, and packaging configurations.</p>
+      <div class="arch-tags">
+        <span class="arch-tag">Custom Python agent framework</span>
+        <span class="arch-tag">Python</span>
+        <span class="arch-tag">Plugin-based agent architecture</span>
+        <span class="arch-tag">Unknown</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Findings -->
+  <div class="findings-section">
+    <h2>Findings (28)</h2>
+    <div class="findings-count">
+      <div class="count-item" style="color:var(--red);border-color:rgba(248,113,113,0.2);">🔴 1 Critical</div>
+      <div class="count-item" style="color:var(--amber);border-color:rgba(251,191,36,0.2);">🟡 9 Warnings</div>
+      <div class="count-item" style="color:var(--cyan);border-color:rgba(34,211,238,0.2);">🔵 18 Info</div>
+    </div>
+    <div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">environments/README.md</span>
+      </div>
+      <div class="finding-title">Incomplete documentation section</div>
+      <div class="finding-desc">The 'Tool Call Parsers' section ends abruptly with 'U', indicating the documentation is truncated mid-word. The section is referenced in the architecture overview but lacks content.</div>
+      <div class="finding-suggestion">💡 Complete the tool_call_parsers section with descriptions of available parsers and their usage.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">environments/README.md</span>
+      </div>
+      <div class="finding-title">ToolContext.terminal() return type inconsistent</div>
+      <div class="finding-desc">The 'Available methods' section lists 'terminal(command, timeout)' but the code example at line 42 shows 'ctx.terminal(&quot;pytest -v&quot;)' returning a dictionary accessed via 'test[&quot;exit_code&quot;]'. The parameter names and return type are inconsistent between the API listing and example.</div>
+      <div class="finding-suggestion">💡 Standardize the documentation: either show terminal(command, timeout) returning a dict with exit_code, or clarify both the parameter format and return type consistently.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/README.md</span>
+      </div>
+      <div class="finding-title">patches.py marked as no-op may cause confusion</div>
+      <div class="finding-desc">The README states patches.py is 'now a no-op' kept only for backward compatibility with imports. Having a no-op module documented prominently may confuse users about whether they need it.</div>
+      <div class="finding-suggestion">💡 Consider either removing patches.py entirely (with a deprecation notice) or documenting why it exists without functionality.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">environments/README.md</span>
+      </div>
+      <div class="finding-title">Concrete environment classes not shown in diagram</div>
+      <div class="finding-desc">The architecture diagram shows TerminalTestEnv, HermesSweEnv, and TerminalBench2EvalEnv inheriting from HermesAgentBaseEnv, but these concrete implementations are not included in the provided files. Users cannot see how setup(), get_next_item(), format_prompt(), compute_reward(), and evaluate() are actually implemented.</div>
+      <div class="finding-suggestion">💡 Either include example implementations or reference where they can be found.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">environments/README.md</span>
+      </div>
+      <div class="finding-title">Error handling in ToolContext example not shown</div>
+      <div class="finding-desc">The compute_reward example shows ctx.read_file() and ctx.terminal() being used without any error handling. If these methods can return errors or exceptions, the documentation should show how to handle them safely.</div>
+      <div class="finding-suggestion">💡 Add error handling examples to the ToolContext code sample.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">README appears truncated with incomplete content</div>
+      <div class="finding-desc">The README.md file ends abruptly. The CLI vs Messaging Quick Reference table is incomplete - it ends with '&lt;tr&gt;&lt;td&gt;Browse skills&lt;/td&gt;' without completing the row or closing the table. The file appears to be missing substantial content after 'Browse skills'.</div>
+      <div class="finding-suggestion">💡 Complete the 'Browse skills' row in the table and add the remaining slash commands documentation that should follow.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">Missing table column header</div>
+      <div class="finding-desc">The CLI vs Messaging Quick Reference table lacks a header row with column labels ('Action', 'CLI', 'Messaging platforms'). While the table is readable, adding a header row would improve accessibility and clarity.</div>
+      <div class="finding-suggestion">💡 Add a header row after the opening &lt;table&gt; tag: '&lt;tr&gt;&lt;th&gt;Action&lt;/th&gt;&lt;th&gt;CLI&lt;/th&gt;&lt;th&gt;Messaging platforms&lt;/th&gt;&lt;/tr&gt;'</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">External script installation without integrity check</div>
+      <div class="finding-desc">The install command uses curl to fetch and execute a shell script directly from GitHub raw content: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash'. While this is a common pattern, there's no SHA256 hash or signature verification provided to ensure script integrity.</div>
+      <div class="finding-suggestion">💡 Consider documenting the expected SHA256 hash of the install script or providing a signed release. Users can inspect the script before execution by first downloading it: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | less'</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">security</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">Node server lacks TLS - LAN-only deployment required</div>
+      <div class="finding-desc">The node server uses bearer-token auth without TLS termination ('no TLS termination built in'). The README instructs users to 'run it on a LAN or behind a reverse proxy you trust.' This creates risk if users misconfigure networks or use untrusted proxies. Bearer tokens sent over plaintext WebSocket (ws://) are vulnerable to interception.</div>
+      <div class="finding-suggestion">💡 Consider adding TLS support directly to the node server, or document more explicitly that WSS (wss://) must be used and that the bearer token should be treated as a high-privilege secret.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">Missing documentation for SKILL.md interaction</div>
+      <div class="finding-desc">The README lists SKILL.md as an agent usage guide but doesn't describe how it interacts with the plugin's capabilities, especially for the v2 realtime mode where the agent speaks. Users may not understand when/how to invoke `meet_say`.</div>
+      <div class="finding-suggestion">💡 Add a brief section showing example agent prompts that use the realtime features, e.g., 'Agent: Use meet_say to introduce yourself at the start of the meeting.'</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">Windows support appears incomplete</div>
+      <div class="finding-desc">README states 'register() no-ops on Wind' (truncated). Windows is listed as out of scope for audio bridging but there's an abrupt cut-off in the text suggesting incomplete documentation.</div>
+      <div class="finding-suggestion">💡 Complete the Windows documentation and clearly state whether basic transcription-only mode works on Windows or if the entire plugin is non-functional.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">code_quality</span>
+        <span class="finding-file">README.md</span>
+      </div>
+      <div class="finding-title">URL validation logic not documented for agents</div>
+      <div class="finding-desc">The Safety section mentions 'URL gate: only https://meet.google.com/abc-defg-hij, /new, /lookup/&lt;id&gt;' but doesn't explain what happens if an agent tries to join other URLs. This is critical security info that should be visible to developers implementing tools.</div>
+      <div class="finding-suggestion">💡 Document the URL validation behavior in tools.py or ensure the SKILL.md explicitly warns agents about URL restrictions.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/benchmarks/yc_bench/README.md</span>
+      </div>
+      <div class="finding-title">Missing troubleshooting section</div>
+      <div class="finding-desc">The README lacks a troubleshooting or common issues section. Users may encounter problems with yc-bench installation, CLI availability, or subprocess failures without guidance on resolution.</div>
+      <div class="finding-suggestion">💡 Add a 'Troubleshooting' section covering: (1) 'yc-bench: command not found' fix, (2) subprocess timeout handling, (3) JSON parsing failures from CLI output, (4) bankruptcy detection edge cases.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/benchmarks/yc_bench/README.md</span>
+      </div>
+      <div class="finding-title">Vague cost estimate language</div>
+      <div class="finding-desc">Cost estimates table uses noncommittal language like 'depending on model' and ranges like '$1-5' without specifying API pricing assumptions, making budget planning difficult.</div>
+      <div class="finding-suggestion">💡 Add explicit API rate assumptions (e.g., 'Assuming $3/1M tokens for Claude Opus 4') and provide exact per-turn cost calculations for each preset.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/benchmarks/yc_bench/README.md</span>
+      </div>
+      <div class="finding-title">Incomplete configuration field documentation</div>
+      <div class="finding-desc">The config table mentions `horizon_years` with 'null = auto from preset' but doesn't explain which presets map to which horizons, leaving users without critical planning information.</div>
+      <div class="finding-suggestion">💡 Add a mapping table showing preset -&gt; default horizon_years (e.g., fast_test=?, medium=?, hard=?). Also document the max impact of overriding this value.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/benchmarks/yc_bench/README.md</span>
+      </div>
+      <div class="finding-title">Architecture diagram omits tool integration details</div>
+      <div class="finding-desc">The architecture shows 'terminal tool' as a black box but doesn't explain how JSON output is parsed, how errors from subprocess are handled, or how the loop detects game-over states.</div>
+      <div class="finding-suggestion">💡 Add a subsection under Architecture explaining: (1) JSON parsing strategy, (2) error handling for malformed CLI output, (3) bankruptcy detection mechanism, (4) how max_agent_turns interacts with simulation turns.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">security</span>
+        <span class="finding-file">plugins/disk-cleanup/README.md</span>
+      </div>
+      <div class="finding-title">Auto-deletion plugin operates silently without user confirmation</div>
+      <div class="finding-desc">The plugin runs automatic cleanup on `on_session_end` hook without any user prompt. While 'quick' cleanup is described as safe, the deletion rules (test files every session, temp files &gt;7 days, cron-output &gt;14 days) execute automatically. If `is_safe_path()` has any bypass or the path validation logic is flawed, files outside HERMES_HOME or /tmp/hermes-* could be deleted.</div>
+      <div class="finding-suggestion">💡 Consider adding a dry-run mode that runs by default on first use, or require explicit opt-in for auto-deletion. Document the exact validation logic of is_safe_path() in the README.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/benchmarks/tblite/README.md</span>
+      </div>
+      <div class="finding-title">README references external script not included in analysis</div>
+      <div class="finding-desc">The README mentions `scripts/prepare_tblite_dataset.py` as the conversion script but this file was not provided for review. The quality and correctness of the dataset conversion process cannot be verified.</div>
+      <div class="finding-suggestion">💡 Include the prepare_tblite_dataset.py script in the codebase review to verify the conversion logic, data integrity checks, and any potential data leakage or transformation issues.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">plugins/disk-cleanup/README.md</span>
+      </div>
+      <div class="finding-title">Slash command syntax not validated against actual implementation</div>
+      <div class="finding-desc">The README documents slash commands like `/disk-cleanup status`, `/disk-cleanup dry-run`, etc., but the actual command handler implementation is not included for review. There's no verification that the documented commands match the implemented interface.</div>
+      <div class="finding-suggestion">💡 Ensure the documented slash commands match the actual implementation. Consider adding a link to the source code or including the command handler in the review.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">code_quality</span>
+        <span class="finding-file">plugins/disk-cleanup/README.md</span>
+      </div>
+      <div class="finding-title">Chrome profile cleanup may interfere with active browser sessions</div>
+      <div class="finding-desc">The plugin tracks and can delete chrome profiles older than 14 days. If a user has a legitimate long-running chrome profile that they want to preserve, the automatic deletion could cause data loss. The 'Always (deep only)' confirmation helps but the tracking mechanism may not distinguish between active and stale profiles.</div>
+      <div class="finding-suggestion">💡 Add a mechanism to detect if a chrome profile is currently in use (e.g., check for active Chrome processes using that profile) before marking for deletion.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">environments/benchmarks/tblite/README.md</span>
+      </div>
+      <div class="finding-title">Correlation statistic lacks confidence interval or sample size</div>
+      <div class="finding-desc">The README states 'The correlation between TBLite and TB2 scores is r = 0.911' but doesn't provide the sample size (n=?), confidence interval, or p-value. This makes it impossible to assess the statistical reliability of this claim.</div>
+      <div class="finding-suggestion">💡 Add sample size, confidence interval, and statistical significance to the correlation claim for transparency.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">optional-skills/mlops/saelens/references/README.md</span>
+      </div>
+      <div class="finding-title">Package name inconsistency in documentation</div>
+      <div class="finding-desc">Installation command shows `pip install sae-lens` (hyphen) but import uses `from sae_lens` (underscore). While technically correct (pip normalizes this), it could confuse users who expect consistency.</div>
+      <div class="finding-suggestion">💡 Use `pip install sae_lens` in installation to match import, or clarify that pip normalizes package names.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">optional-skills/mlops/saelens/references/README.md</span>
+      </div>
+      <div class="finding-title">Incomplete pre-trained SAEs table</div>
+      <div class="finding-desc">The 'Available Pre-trained SAEs' table has an entry 'Various' with description 'Search HuggingFace' which provides no useful information. Users would need to know what to search for or what specific SAE releases are recommended.</div>
+      <div class="finding-suggestion">💡 Either remove this row, link directly to a HuggingFace search with appropriate filters, or list the top 2-3 community releases with their IDs.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--red)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--red)">CRITICAL</span>
+        <span class="finding-category">security</span>
+        <span class="finding-file">plugins/memory/byterover/README.md</span>
+      </div>
+      <div class="finding-title">Unsafe curl pipe to shell installation pattern</div>
+      <div class="finding-desc">The installation instruction `curl -fsSL https://byterover.dev/install.sh | sh` executes arbitrary code from a remote URL without inspection. This is a well-known security anti-pattern that could allow man-in-the-middle attacks or malicious script injection.</div>
+      <div class="finding-suggestion">💡 Use safer alternatives: (1) Show the script content first with `curl -fsSL https://byterover.dev/install.sh | less`, (2) download to file first for inspection, (3) or use npm which has built-in integrity checking: `npm install -g byterover-cli`</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">plugins/memory/byterover/README.md</span>
+      </div>
+      <div class="finding-title">Undefined HERMES_HOME environment variable</div>
+      <div class="finding-desc">The working directory references `$HERMES_HOME/byterover/` but `HERMES_HOME` is not defined anywhere in the documentation. Users may not know what this resolves to or how to set it.</div>
+      <div class="finding-suggestion">💡 Add a note explaining that HERMES_HOME defaults to `~/.hermes` if not set, or link to documentation explaining the Hermes configuration.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--amber)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--amber)">WARNING</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">packaging/homebrew/README.md</span>
+      </div>
+      <div class="finding-title">Missing referenced file content</div>
+      <div class="finding-desc">The README references `packaging/homebrew/hermes-agent.rb` as a starting point but does not include or link to this file. Users cannot verify the formula without browsing the repository.</div>
+      <div class="finding-suggestion">💡 Include the formula file content inline, add a relative link to the file, or note that the file lives in a specific commit/release.</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">documentation</span>
+        <span class="finding-file">packaging/homebrew/README.md</span>
+      </div>
+      <div class="finding-title">Unfamiliar terminology without explanation</div>
+      <div class="finding-desc">The term 'CalVer tag tarball' is mentioned but not explained. Users unfamiliar with Calendar Versioning may not understand why they should prefer semver-named sdist assets instead.</div>
+      <div class="finding-suggestion">💡 Add a brief explanation: 'CalVer (e.g., 2024.01.15) vs semver (e.g., 1.2.3) — use semver sdist for stable releases.'</div>
+    </div>
+<div class="finding" style="border-left:3px solid var(--cyan)">
+      <div class="finding-header">
+        <span class="finding-severity" style="color:var(--cyan)">INFO</span>
+        <span class="finding-category">maintainability</span>
+        <span class="finding-file">packaging/homebrew/README.md</span>
+      </div>
+      <div class="finding-title">Magic ignore_packages list without justification</div>
+      <div class="finding-desc">The `ignore_packages: %w[certifi cryptography pydantic]` list is mentioned without explaining why these specific packages should be ignored. This could cause issues if dependencies change.</div>
+      <div class="finding-suggestion">💡 Add a comment explaining why these are ignored (likely because they conflict with system packages or other formulae), or link to Homebrew documentation on this pattern.</div>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="recs-section">
+    <h2>Recommendations</h2>
+    
+    <div class="rec">
+      <div class="rec-priority" style="color:var(--amber)">
+        📌 medium
+      </div>
+      <div class="rec-action">Incomplete documentation section</div>
+      <div class="rec-meta">days · medium impact</div>
+    </div>
+  
+
+    <div class="rec">
+      <div class="rec-priority" style="color:var(--amber)">
+        📌 medium
+      </div>
+      <div class="rec-action">ToolContext.terminal() return type inconsistent</div>
+      <div class="rec-meta">days · medium impact</div>
+    </div>
+  
+
+    <div class="rec">
+      <div class="rec-priority" style="color:var(--amber)">
+        📌 medium
+      </div>
+      <div class="rec-action">README appears truncated with incomplete content</div>
+      <div class="rec-meta">days · medium impact</div>
+    </div>
+  
+
+    <div class="rec">
+      <div class="rec-priority" style="color:var(--amber)">
+        📌 medium
+      </div>
+      <div class="rec-action">Node server lacks TLS - LAN-only deployment required</div>
+      <div class="rec-meta">days · medium impact</div>
+    </div>
+  
+
+    <div class="rec">
+      <div class="rec-priority" style="color:var(--amber)">
+        📌 medium
+      </div>
+      <div class="rec-action">URL validation logic not documented for agents</div>
+      <div class="rec-meta">days · medium impact</div>
+    </div>
+  
+  </div>
+
+  <!-- Strengths & Risks -->
+  <div class="sr-section">
+    <div class="sr-grid">
+      <div class="sr-box">
+        <h3 style="color:var(--green);">✅ Strengths</h3>
+        <ul><li>Active repository with contributors</li></ul>
+      </div>
+      <div class="sr-box">
+        <h3 style="color:var(--red);">⚠️ Risks</h3>
+        <ul><li class="risk">⚠️ 1 critical issues found</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Generated by <strong>Archiview</strong> — part of the PatchHive ecosystem</p>
+    <p style="margin-top:4px;">4/30/2026, 9:17:02 AM · NousResearch/hermes-agent</p>
+    <p style="margin-top:8px;opacity:0.5;">Drey + Vex + Tuck · Autonomous AI Audit</p>
+  </div>
+
+</div>
+<script>
+(function(){var b=document.querySelectorAll('.score-bar');b.forEach(function(el,i){var w=parseInt(el.getAttribute('data-width'),10);setTimeout(function(){el.style.width=w+'%';},i*80);});})();
+</script>
+</body>
+</html>
