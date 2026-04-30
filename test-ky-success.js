@@ -50,11 +50,15 @@ async function run() {
     console.log('\n=== DRY-RUN PR PACKAGE (sindresorhus/ky) ===');
     console.log('Selected: ' + dr.selected_finding.title + ' (' + dr.selected_finding.severity + ')');
     console.log('File:     ' + dr.selected_finding.file);
-    console.log('Patch:    ' + dr.patch.summary);
-    console.log('Diff:     ' + dr.patch.diff_summary);
-    console.log('Branch:   ' + dr.pr_draft.branch);
-    console.log('Validation: ' + JSON.stringify(dr.validation, null, 2));
-    console.log('\nFull output in data/ky-pr-result.json');
+    if (dr.patch) {
+      console.log('Patch:    ' + (dr.patch.summary || '(no summary)'));
+      console.log('Diff:     ' + (dr.patch.diff_summary || '(no diff)'));
+      console.log('Branch:   ' + dr.pr_draft.branch);
+      console.log('Validation: ' + JSON.stringify(dr.validation, null, 2));
+    } else if (dr.error) {
+      console.log('Error:    ' + dr.error);
+    }
+    console.log('\nFull output in data/ky-pr-source-first.json');
   } else if (prResult.status === 'no_safe_candidate') {
     console.log('\n=== PR GENERATOR — INTENTIONAL NO-OP (sindresorhus/ky) ===');
     console.log('Status:   ' + prResult.status);

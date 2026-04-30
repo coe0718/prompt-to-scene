@@ -1,0 +1,15 @@
+{
+  "dry_run": {
+    "selected_finding": {
+      "severity": "WARNING",
+      "file": "source/core/Ky.ts",
+      "title": "Incomplete cloning of mutable options",
+      "fix_summary": "Add body cloning to the cloneInitHookOptions function by including `body: cloneShallow(options.body)` in the cloned options object. This prevents init hooks from mutating the body and affecting subsequent requests.",
+      "confidence": "high"
+    },
+    "original_content": "import {HTTPError} from '../errors/HTTPError.js';\nimport {NetworkError} from '../errors/NetworkError.js';\nimport {NonError} from '../errors/NonError.js';\nimport {ForceRetryError} from '../errors/ForceRetryError.js';\nimport {SchemaValidationError} from '../errors/SchemaValidationError.js';\nimport {TimeoutError} from '../errors/TimeoutError.js';\nimport type {\n\tInput,\n\tInternalOptions,\n\tNormalizedOptions,\n\tOptions,\n\tSearchParamsInit,\n\tSearchParamsOption,\n} from '../types/options.js';\nimport {type ResponsePromise} from '../types/ResponsePromise.js';\nimport type {StandardSchemaV1} from '../types/standard-schema.js';\nimport {streamRequest, streamResponse} from '../utils/body.js';\nimport {\n\tcloneShallow,\n\tmergeHeaders,\n\tmergeHooks,\n\tdeletedParametersSymbol,\n} from '../utils/merge.js';\nimport type {RetryOptions} from '../types/retry.js';\nimport {normalizeRequestMethod, normalizeRetryOptions} from '../utils/normalize.js';\nimport timeout from '../utils/timeout.js';\nimport delay from '../utils/delay.js';\nimport {type ObjectEntries} from '../utils/types.js';\nimport {findUnknownOptions, hasSearchParameters} from '../utils/options.js';\nimport isRawNetworkError from '../utils/is-network-error.js';\nimport {isHTTPError, isNetworkError, isTimeoutError} from '../utils/type-guards.js';\nimport {\n\tmaxSafeTimeout,\n\tresponseTypes,\n\tstop,\n\tRetryMarker,\n\tsupportsAbortController,\n\tsupportsAbortSignal,\n\tsupportsFormData,\n\tsupportsResponseStreams,\n\tsupportsRequestStreams,\n} from './constants.js';\n\nconst maxErrorResponseBodySize = 10 * 1024 * 1024;\nconst prefixUrlRenamedErrorMessage = 'The `prefixUrl` option has been renamed `prefix` in v2 and enhanced to allow slashes in input. See also the new `baseUrl` option for improved flexibility with standard URL resolution: https://github.com/sindresorhus/ky#baseurl';\nconst timedOutResponseData = Symbol('timedOutResponseData');\n\nconst createTextDecoder = (contentType: string): TextDecoder => {\n\tconst match = /;\\s*charset\\s*=\\s*(?:\"([^\"]+)\"|([^;,\\s]+))/i\n\n... (truncated)",
+    "patch": null,
+    "error": "Fix generation failed: Could not extract valid JSON from response"
+  },
+  "message": "Selection and fetch succeeded but fix generation failed"
+}

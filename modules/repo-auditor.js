@@ -586,47 +586,24 @@ function extractJSON(text) {
     throw new Error('No JSON found in response');
   }
   let jsonStr = jsonMatch[0];
-  // Find balanced braces (first complete pair)
-  let braceCount = 0, endIndex = 0;
-  for (let i = 0; i < jsonStr.length; i++) {
-    if (jsonStr[i] === '{') braceCount++;
-    if (jsonStr[i] === '}') braceCount--;
-    if (braceCount === 0) { endIndex = i + 1; break; }
-  }
-  let result = jsonStr.substring(0, endIndex || undefined);
 
-  // Try to parse; if it fails, attempt salvage
-  try {
-    JSON.parse(result);
-    return result;
-  } catch(_) {
-    // Attempt 1: remove trailing commas before closing brackets/braces
-    result = result.replace(/,(\s*[}\]])/g, '$1');
-    try { JSON.parse(result); return result; } catch(_) {}
-    // Attempt 2: find the LAST balanced brace pair and try to parse
-    // This handles truncated JSON where content after the last } may be garbage
-    let lastDepth = 0, lastBalanced = -1;
-    for (let i = 0; i < result.length; i++) {
-      if (result[i] === '{') lastDepth++;
-      if (result[i] === '}') { lastDepth--; if (lastDepth === 0) lastBalanced = i; }
-    }
-    if (lastBalanced > 0) {
-      const sized = result.slice(0, lastBalanced + 1).replace(/,(\s*[}\]])/g, '$1');
-      try { return JSON.parse(sized); } catch(_) {}
-    }
-    // Attempt 3: step backward from last balanced position char by char
-    for (let i = (lastBalanced > 0 ? lastBalanced : result.length); i >= 0; i--) {
-      const sized = result.slice(0, i + 1).replace(/,(\s*[}\]])/g, '$1');
-      try { return JSON.parse(sized); } catch(_) {}
-    }
-    // Dump raw response for inspection
-    const fs = require('fs');
-    const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
-    fs.writeFileSync(dumpPath, text);
-    console.warn('Auditor: Dumped failed JSON to ' + dumpPath);
-    // Nothing worked — return what we have and let caller handle the error
-    throw new Error('Could not extract valid JSON from response');
+  // FIRST: try parsing the full match — JSON.parse correctly handles braces
+  // inside string values, unlike naive brace counting.
+  try { return JSON.parse(jsonStr); } catch(_) {}
+
+  // Full parse failed — likely truncated. Try progressively shorter strings
+  // from the end until JSON.parse succeeds. This handles mid-string truncation
+  // where no balanced brace pair exists in the output.
+  for (let i = jsonStr.length - 1; i >= 0; i--) {
+    const candidate = jsonStr.slice(0, i + 1).replace(/,\s*([}\]])/g, '$1');
+    try { return JSON.parse(candidate); } catch(_) {}
   }
+  // Dump raw response for inspection
+  const fs = require('fs');
+  const dumpPath = '/tmp/archiview-json-fail-' + Date.now() + '.txt';
+  fs.writeFileSync(dumpPath, text);
+  console.warn('Auditor: Dumped failed JSON to ' + dumpPath);
+  throw new Error('Could not extract valid JSON from response');
 }
 
 // ─── PR Generation (Dry-Run) ────────────────────────────────────────────────
@@ -707,8 +684,9 @@ Rules:
 - Do NOT refactor, reformat, improve naming, or touch anything else
 - The fix must be correct and complete — no placeholders or TODOs
 - Assume the finding is legitimate. Even if the file looks clean, the issue may be subtle.
-- Output the ENTIRE fixed file content, not just the changed lines
-- If the file is already correct, output it unchanged and explain in the summary
+- Output a unified diff (diff -u format) showing exactly what changed
+- The diff MUST be minimal — only the lines that need to change
+- Do NOT output the entire file. Output ONLY the diff. Large file content causes truncation.
 
 Output ONLY valid JSON. No markdown, no explanation.
 
@@ -716,7 +694,7 @@ Output ONLY valid JSON. No markdown, no explanation.
   "success": true,
   "summary": "brief summary of what changed",
   "diff_summary": "what lines changed and how (e.g., 'Added null check on line 42')",
-  "full_file_content": "the COMPLETE file content after applying the fix",
+  "diff": "unified diff output showing the exact changes",
   "verification": {
     "test_command": "Likely test command. Infer from repo context. NEVER null unless genuinely untestable (e.g. config file change). Examples: 'npm test', 'pytest tests/', 'cargo test', 'go test ./...'",
     "lint_command": "Likely lint/typecheck command. Infer from repo context. NEVER null. Examples: 'npm run lint', 'ruff check .', 'cargo clippy', 'gofmt -d .'",
@@ -967,8 +945,8 @@ async function generateFixPR(auditResult, repoUrl) {
         message: 'Fix generated but rejected — no validation commands to verify correctness',
       };
     }
-    // If new content is identical to original, the fixer didn't actually change anything
-    if (fixResult.full_file_content === fileContent) {
+    // If no diff was produced, the fixer didn't actually change anything
+    if (!fixResult.diff || fixResult.diff.trim().length === 0) {
       return {
         dry_run: {
           selected_finding: {
@@ -979,7 +957,7 @@ async function generateFixPR(auditResult, repoUrl) {
             confidence: selectorResult.confidence,
           },
           patch: null,
-          error: 'Fixer returned unchanged file content — no fix applied',
+          error: 'Fixer returned no diff — no fix applied',
         },
         message: 'Fix output matches original — likely no issue to fix in this file',
       };
@@ -1028,7 +1006,7 @@ async function generateFixPR(auditResult, repoUrl) {
       summary: fixResult.summary,
       diff_summary: fixResult.diff_summary,
       original_content_preview: fileContent.slice(0, 500) + (fileContent.length > 500 ? '\n...' : ''),
-      new_content_preview: fixResult.full_file_content.slice(0, 500) + (fixResult.full_file_content.length > 500 ? '\n...' : ''),
+      diff_preview: (fixResult.diff || '').slice(0, 500) + ((fixResult.diff || '').length > 500 ? '\n...' : ''),
     },
     validation: fixResult.verification || { test_command: null, lint_command: null, static_validation: null, validation_confidence: 'low' },
     pr_draft: {
