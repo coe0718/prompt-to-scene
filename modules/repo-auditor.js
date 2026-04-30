@@ -579,9 +579,21 @@ function extractJSON(text) {
     // Attempt 1: remove trailing commas before closing brackets/braces
     result = result.replace(/,(\s*[}\]])/g, '$1');
     try { JSON.parse(result); return result; } catch(_) {}
-    // Attempt 2: strip trailing characters until JSON parses
-    for (let i = result.length; i >= 0; i--) {
-      try { return JSON.parse(result.slice(0, i)); } catch(_) {}
+    // Attempt 2: find the LAST balanced brace pair and try to parse
+    // This handles truncated JSON where content after the last } may be garbage
+    let lastDepth = 0, lastBalanced = -1;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i] === '{') lastDepth++;
+      if (result[i] === '}') { lastDepth--; if (lastDepth === 0) lastBalanced = i; }
+    }
+    if (lastBalanced > 0) {
+      const sized = result.slice(0, lastBalanced + 1).replace(/,(\s*[}\]])/g, '$1');
+      try { return JSON.parse(sized); } catch(_) {}
+    }
+    // Attempt 3: step backward from last balanced position char by char
+    for (let i = (lastBalanced > 0 ? lastBalanced : result.length); i >= 0; i--) {
+      const sized = result.slice(0, i + 1).replace(/,(\s*[}\]])/g, '$1');
+      try { return JSON.parse(sized); } catch(_) {}
     }
     // Dump raw response for inspection
     const fs = require('fs');
@@ -744,7 +756,7 @@ async function generateFixPR(auditResult, repoUrl) {
       const raw = await callLLM([
         { role: 'system', content: PR_SELECTOR_PROMPT },
         { role: 'user', content: JSON.stringify(selectorInput, null, 2) },
-      ], model, 0.3, 4096);
+      ], 'minimax27', 0.3, 4096);
 
       if (!raw || !raw.trim()) {
         if (attempt === 0) { console.warn('PR: Empty selector response, retrying...'); continue; }

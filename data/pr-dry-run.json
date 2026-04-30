@@ -1,14 +1,4 @@
 {
-  "dry_run": {
-    "selected_finding": {
-      "severity": "WARNING",
-      "file": "tools.py",
-      "title": "Missing 'weakref' import",
-      "fix_summary": "Adds the missing `import weakref` statement to tools.py, which is referenced on lines 32 and 37 but currently omitted from the imports. This prevents an unambiguous NameError at runtime and is a single-line change with zero blast radius.",
-      "confidence": "high"
-    },
-    "patch": null,
-    "error": "Could not fetch file from GitHub: GitHub 404 fetching tools.py"
-  },
-  "message": "Selection succeeded but file fetch failed — check permissions or repo visibility"
+  "dry_run": null,
+  "error": "Selector returned empty response after retry"
 }
