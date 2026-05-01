@@ -203,7 +203,7 @@ const PRESETS = [
       model: "chirp-4"
     },
     visual: {
-      style: "ASCII",
+      style: "geometric",
       color_palette: ["#ff00ff", "#00ffff", "#1a1a2e", "#0d0d0d"],
       effects: ["scanlines", "noise", "vignette"],
       intensity: 0.6,

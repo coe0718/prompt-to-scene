@@ -616,7 +616,7 @@ const SCENES = {
     prompt: 'A cyberpunk cityscape at night with rain and neon lights',
     scene: { name: 'neon-rain', mood: 'melancholic', tempo: 85, duration_seconds: 45, genre: 'electronic', tags: ['synthwave','retro','cinematic'] },
     audio: { prompt: 'Synthwave electronic with retro 80s synths, slow build, melancholic atmosphere, pulsing bass, dreamy pads', instrumental: true, model: 'chirp-4' },
-    visual: { style: 'ascii', color_palette: ['#ff00ff','#00ffff','#1a1a2e'], effects: ['scanlines','bloom'], intensity: 0.7, ascii_char_set: 'standard', resolution: {width:80,height:40} },
+    visual: { style: 'geometric', color_palette: ['#ff00ff','#00ffff','#1a1a2e'], effects: ['scanlines','bloom'], intensity: 0.7, ascii_char_set: 'standard', resolution: {width:80,height:40} },
     timing: { beat_interval_ms: 705, bar_length_beats: 4,
       sections: [{name:'intro',start_beat:0,end_beat:8},{name:'build',start_beat:8,end_beat:24},{name:'drop',start_beat:24,end_beat:40},{name:'outro',start_beat:40,end_beat:48}],
       key_moments: [{beat:24,event:'drop'},{beat:40,event:'fade'}]
@@ -1015,6 +1015,7 @@ function setupStyleButtons() {
       activeStyle = btn.dataset.style;
       // Re-generate outputs with new style
       clearAllFrames();
+      generateOutput('p5js');
     };
   });
 }
@@ -1028,6 +1029,7 @@ function setupEffectButtons() {
         activeEffects.push(b.dataset.effect);
       });
       clearAllFrames();
+      generateOutput('p5js');
     };
   });
 }
