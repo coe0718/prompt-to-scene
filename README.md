@@ -17,10 +17,10 @@ Archiview runs a **3-pass LLM analysis** on any public GitHub repository:
 | Pass | What Happens | Time |
 |------|-------------|------|
 | **1. Structural Analysis** | Reads README, config files, directory tree → maps architecture, framework, language, build system | ~10s |
-| **2. Deep Code Review** | Source files chunked and analyzed for code quality, security, maintainability — one file at a time | ~15-60s |
+| **2. Deep Code Review** (MiniMax M2.7) | Source files chunked and analyzed for code quality, security, maintainability — one file at a time | ~15-60s |
 | **3. Aggregation** | All findings merged into final scores, prioritized recommendations, risks, and verdict | ~10s |
 
-**Uses Kimi K2.6** via OpenRouter — a reasoning model that provides detailed, contextual analysis. Live SSE streaming shows progress in real time.
+**Two models, one pipeline:** Kimi K2.6 handles structural analysis, aggregation, and fix generation. MiniMax M2.7 handles deep code review and PR candidate selection. Both via OpenRouter. Live SSE streaming shows progress in real time.
 
 ### Sample Repo Scores
 
@@ -39,7 +39,7 @@ git clone https://github.com/coe0718/archiview && cd archiview
 
 # Set up API keys
 cp .env.example .env
-# Edit .env — add your OPENROUTER_API_KEY (required for Kimi K2.6)
+# Edit .env — add your OPENROUTER_API_KEY (required for Kimi K2.6 + MiniMax M2.7)
 # Also set GITHUB_TOKEN to enable PR publishing
 
 # Start (no npm install needed — zero dependencies)
@@ -115,8 +115,8 @@ The badge shows the overall score (color-coded) and links back to the full repor
 | Layer | Tech |
 |-------|------|
 | **Server** | Node.js (zero npm deps) |
-| **LLM** | Kimi K2.6 via OpenRouter |
-| **Fallback** | MiniMax M2.7 via OpenRouter |
+|| **Kimi K2.6** | Structural analysis, aggregation, fix generation via OpenRouter |
+|| **MiniMax M2.7** | Deep code review, PR candidate selection via OpenRouter |
 | **Frontend** | Pure HTML/CSS/JS (no build step) |
 | **Containers** | Docker + compose |
 
