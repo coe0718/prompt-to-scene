@@ -10,7 +10,7 @@
  *
  * Environment (optional .env file):
  *   OPENROUTER_API_KEY   — for minimax-m2.5 (default LLM)
- *   NVIDIA_API_KEY       — for kimi-k2.5-nim (Kimi track)
+ *   NVIDIA_API_KEY       — legacy, not used (all models via OpenRouter)
  *   PORT                 — server port (default: 7041)
  *
  * Endpoints:

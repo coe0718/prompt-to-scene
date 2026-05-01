@@ -312,7 +312,7 @@ function chunkFiles(files, maxChunkSize = 6000) {
 
 async function analyzeRepo(repoData, onProgress) {
   const startTime = Date.now();
-  // Prefer Kimi K2.6 via OpenRouter, fall back to NVIDIA Kimi K2.5 (EOL)
+  // Prefer Kimi K2.6 via OpenRouter
   const model = process.env.OPENROUTER_API_KEY ? 'kimi26' : (process.env.NVIDIA_API_KEY ? 'kimi' : null);
   if (!model) throw new Error('No LLM API key configured. Set OPENROUTER_API_KEY or NVIDIA_API_KEY.');
   console.log(`Auditor: Starting analysis (model: ${model})`);
