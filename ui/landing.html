@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prompt-to-Scene — Built by Autonomous AI Agents</title>
-<meta name="description" content="A creative tool built entirely by autonomous AI agents. p5.js animations, ASCII art, procedural audio — every line written by Archiview.">
+<title>Archiview — Autonomous Code Review by AI Agents</title>
+<meta name="description" content="Point Archiview at any GitHub repo. It reads the architecture, finds the bugs, scores code quality, and generates a fix plan — entirely autonomously. Built by autonomous AI agents.">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -223,6 +223,22 @@
   }
   .commit-table .commit-desc { color: var(--text); max-width: 400px; }
 
+  /* Features */
+  .features { padding: 80px 0; }
+  .feat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px; margin-top: 40px;
+  }
+  .feat-card {
+    padding: 20px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    text-align: center;
+  }
+  .feat-card .feat-emoji { font-size: 2rem; margin-bottom: 10px; }
+  .feat-card h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
+  .feat-card p { font-size: 0.82rem; color: var(--muted); }
+
   /* Demo */
   .demo-section { padding: 0 0 80px; }
   .demo-embed {
@@ -252,22 +268,6 @@
     50% { opacity: 1; }
   }
 
-  /* Generators */
-  .generators { padding: 80px 0; }
-  .gen-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px; margin-top: 40px;
-  }
-  .gen-card {
-    padding: 20px; border-radius: 12px;
-    background: var(--surface); border: 1px solid var(--border);
-    text-align: center;
-  }
-  .gen-card .gen-emoji { font-size: 2rem; margin-bottom: 10px; }
-  .gen-card h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
-  .gen-card p { font-size: 0.82rem; color: var(--muted); }
-
   /* Footer */
   .footer-cta {
     padding: 80px 0; text-align: center;
@@ -290,7 +290,7 @@
     .hero h1 { font-size: 2rem; }
     .stats { gap: 24px; }
     .stat-num { font-size: 1.5rem; }
-    .agent-grid, .gen-grid { grid-template-columns: 1fr; }
+    .agent-grid, .feat-grid { grid-template-columns: 1fr; }
     .arch-diagram { font-size: 0.65rem; }
     .commit-table td, .commit-table th { padding: 8px 10px; font-size: 0.78rem; }
   }
@@ -301,30 +301,30 @@
 
 <!-- Nav -->
 <nav class="container">
-  <div class="logo">prompt<span>2</span>scene</div>
+  <div class="logo">archi<span>view</span></div>
   <div class="links">
     <a href="#agents">The Agents</a>
     <a href="#timeline">Timeline</a>
     <a href="#architecture">Architecture</a>
-    <a href="#try">See It</a>
-    <a href="/audit" style="color:var(--accent);">Repo Auditor →</a>
+    <a href="#try">Try It</a>
+    <a href="/audit" style="color:var(--accent);">Launch Auditor →</a>
   </div>
-  <a href="#try" class="btn btn-primary">Launch Demo →</a>
+  <a href="/audit" class="btn btn-primary">Run an Audit →</a>
 </nav>
 
 <!-- Hero -->
 <section class="hero container">
   <div class="badge">🤖 Built by Autonomous AI Agents</div>
-  <h1>No human wrote a<br>single line of code.</h1>
+  <h1>Point it at a repo.<br>It does the rest.</h1>
   <p class="subtitle">
-    This entire creative tool — server, generators, UI, export, deployment — was designed,
-    implemented, reviewed, and shipped by four specialized AI agents working together.
+    Archiview reads any public GitHub repo — architecture, code quality, security, documentation, maintainability.
+    Scores across 5 axes, surfaces prioritized findings, and generates fix plans. All autonomously.
   </p>
   <p class="hook">
-    A human gave direction. The agents built everything.
+    One URL. 30 seconds. A full audit report.
   </p>
   <div class="cta-group">
-    <a href="#try" class="btn btn-primary">See the Demo →</a>
+    <a href="/audit" class="btn btn-primary">Try It Now →</a>
     <a href="#agents" class="btn btn-outline">Meet the Team</a>
   </div>
 </section>
@@ -340,7 +340,7 @@
     <div class="stat-label">Days to Ship</div>
   </div>
   <div class="stat">
-    <div class="stat-num amber">16</div>
+    <div class="stat-num amber">21+</div>
     <div class="stat-label">Commits</div>
   </div>
   <div class="stat">
@@ -348,12 +348,12 @@
     <div class="stat-label">Human Lines</div>
   </div>
   <div class="stat">
-    <div class="stat-num green">12</div>
-    <div class="stat-label">API Endpoints</div>
+    <div class="stat-num green">3</div>
+    <div class="stat-label">Pass Pipeline</div>
   </div>
   <div class="stat">
-    <div class="stat-num accent">20</div>
-    <div class="stat-label">Features</div>
+    <div class="stat-num accent">5</div>
+    <div class="stat-label">Score Axes</div>
   </div>
 </div>
 
@@ -366,28 +366,28 @@
       <span class="agent-emoji">🛠️</span>
       <h3>Drey</h3>
       <div class="agent-role">Coding Specialist</div>
-      <p>Wrote every line of production code. Server, generators, UI, export, vision pipeline, stitcher. Built all 12 API endpoints.</p>
-      <div class="agent-commits">11 commits</div>
+      <p>Built the entire server, auditor pipeline (3-pass LLM), repo fetcher, report generator with SVG radar chart, badge endpoint, scan history, PR generator, and Docker deployment.</p>
+      <div class="agent-commits">15+ commits</div>
     </div>
     <div class="agent-card">
       <span class="agent-emoji">🔍</span>
       <h3>Vex</h3>
       <div class="agent-role">Code Reviewer</div>
-      <p>Reviewed every pull request. Caught 3 critical and 10 warning-level bugs across the codebase. Enforced error handling, memory safety, and p5.js compatibility.</p>
-      <div class="agent-commits">3 code reviews</div>
+      <p>Reviewed every PR. Caught critical bugs in JSON parsing, LLM response truncation, error handling paths. Enforced modular architecture across the entire server codebase.</p>
+      <div class="agent-commits">4 code reviews</div>
     </div>
     <div class="agent-card">
       <span class="agent-emoji">🔬</span>
       <h3>Echo</h3>
       <div class="agent-role">Scout / Researcher</div>
-      <p>Tested CDN availability, validated p5.js 2.0 API breakages, verified NVIDIA vision endpoint, discovered GIF export workflow.</p>
-      <div class="agent-commits">Discovery reports</div>
+      <p>Tested LLM models across providers, identified Kimi K2.6 as primary model, scouted fallback options, validated rate limits and response quality for the 3-pass pipeline.</p>
+      <div class="agent-commits">Research reports</div>
     </div>
     <div class="agent-card">
       <span class="agent-emoji">📝</span>
       <h3>Herald</h3>
       <div class="agent-role">Documentarian</div>
-      <p>Wrote README, landing page, submission materials. Documented architecture, API endpoints, deployment. Authored this page.</p>
+      <p>Wrote README, landing page, submission materials. Documented API endpoints, deployment, project structure. Authored this page.</p>
       <div class="agent-commits">Documentation</div>
     </div>
   </div>
@@ -396,37 +396,37 @@
 <!-- Timeline -->
 <section class="timeline-section container" id="timeline">
   <div class="section-label">Development</div>
-  <div class="section-title">5 days, 16 commits, zero human code</div>
+  <div class="section-title">5 days, 21+ commits, zero human code</div>
   <div class="timeline">
     <div class="tl-item">
       <div class="tl-dot"></div>
       <div class="tl-day">Day 1 · Architecture</div>
-      <h3>Foundation</h3>
-      <p>Echo scouted the creative tool landscape and recommended p5.js + Web Audio API. Drey built the Director agent, HTTP server, and 20 preset scene specs.</p>
+      <h3>Audit pipeline design</h3>
+      <p>Echo scouted LLM providers. Drey designed the 3-pass audit pipeline: structural analysis → deep code review → aggregation. Built the repo fetcher and GitHub API integration.</p>
     </div>
     <div class="tl-item">
       <div class="tl-dot"></div>
-      <div class="tl-day">Day 2 · Generators</div>
-      <h3>Three renderers, one spec</h3>
-      <p>Drey built all four generators: p5.js enhanced (8 visual styles), 4-layer ASCII engine, procedural audio synthesis, and the stitcher for GIF/video export.</p>
+      <div class="tl-day">Day 2 · Analysis Engine</div>
+      <h3>LLM pipeline + scoring</h3>
+      <p>Drey built the chunked analysis engine, 5-axis scoring system, and SSE streaming. Implemented Kimi K2.6 integration for structural analysis and MiniMax M2.7 for deep reviews.</p>
     </div>
     <div class="tl-item">
       <div class="tl-dot"></div>
-      <div class="tl-day">Day 3 · Integration</div>
-      <h3>UI + Image-to-Scene</h3>
-      <p>Drey built the full tabbed UI with sidebar, generators, preview panels, scene history, and theme toggle. Echo validated the NVIDIA vision LLM — Drey wired Image-to-Scene pipeline.</p>
+      <div class="tl-day">Day 3 · Reports + UI</div>
+      <h3>Beautiful audit reports</h3>
+      <p>Drey built the report generator with SVG radar chart, inline CSS, print support. Created the auditor UI with live SSE streaming, scan history, and shareable repo links.</p>
     </div>
     <div class="tl-item">
       <div class="tl-dot"></div>
-      <div class="tl-day">Day 4 · Review</div>
-      <h3>Vex code audit</h3>
-      <p>Vex reviewed the entire codebase and found 13 issues (3 CRITICAL, 10 WARNING). Drey fixed all of them: canvas bugs, HTML escaping, async error paths, blob URL leaks. Vex re-verified.</p>
+      <div class="tl-day">Day 4 · PR Generation</div>
+      <h3>From findings to fixes</h3>
+      <p>Drey built the PR generator with 3-layer safety gates (upstream filter, selector, post-fixer validation). Vex reviewed and caught truncation handling bugs. Echo tested the full pipeline end-to-end.</p>
     </div>
     <div class="tl-item">
       <div class="tl-dot"></div>
-      <div class="tl-day">Day 5 · Ship</div>
-      <h3>Export + polish</h3>
-      <p>Drey built the standalone export (CDN inlining), auto-demo, keyboard shortcuts. Herald wrote documentation, landing page, and submission materials.</p>
+      <div class="tl-day">Day 5 · Polish + Ship</div>
+      <h3>Demo readiness</h3>
+      <p>Drey added the SVG badge, famous repo showcase, self-audit, Docker compose, file count selector. Vex validated error paths. Herald wrote the landing page and submission docs.</p>
     </div>
   </div>
 </section>
@@ -434,18 +434,21 @@
 <!-- Architecture -->
 <section class="arch-section container" id="architecture">
   <div class="section-label">How It Works</div>
-  <div class="section-title">Director → Spec → Generators</div>
+  <div class="section-title">3-pass LLM analysis pipeline</div>
   <div class="arch-diagram">
-    <span class="box">Prompt</span> or <span class="box">Image</span> or <span class="box amber">🎲 Surprise Me</span><br>
+    <span class="box">GitHub Repo URL</span><br>
     <span class="arrow">▼</span><br>
-    <span class="box green">Director Agent</span><br>
+    <span class="box green">Pass 1 · Structural</span><br>
+    <span style="color:var(--muted);font-size:0.75rem;">README · config files · directory tree · language · framework</span><br>
     <span class="arrow">▼</span><br>
-    <span style="color:var(--accent3);font-weight:600;">Scene Spec JSON</span><br>
-    mood · tempo · palette · style · timing · sections<br>
+    <span class="box amber">Pass 2 · Deep Analysis</span><br>
+    <span style="color:var(--muted);font-size:0.75rem;">Source files chunked → code quality · security · maintainability</span><br>
     <span class="arrow">▼</span><br>
-    <span class="box">🎨 p5.js</span> &nbsp; <span class="box">▓ ASCII</span> &nbsp; <span class="box">♫ Audio</span> &nbsp; <span class="box pink">🖼️ Stitcher</span><br>
+    <span class="box pink">Batched Aggregation</span><br>
+    <span style="color:var(--muted);font-size:0.75rem;">Kimi summarizes findings in batches → final merge</span><br>
     <span class="arrow">▼</span><br>
-    <span class="box green">Standalone HTML</span> &nbsp; <span class="box">GIF</span> &nbsp; <span class="box">WebM</span> &nbsp; <span class="box">Share URL</span>
+    <span class="box green">Final Report</span> &nbsp; <span class="box">SVG Badge</span> &nbsp; <span class="box">Fix PR</span> &nbsp; <span class="box">Download</span><br>
+    <span style="color:var(--muted);font-size:0.75rem;">5-axis scoring · prioritized findings · shareable · self-contained</span>
   </div>
 </section>
 
@@ -456,77 +459,77 @@
   <table class="commit-table">
     <tr><th>Commit</th><th>Agent</th><th>What Happened</th></tr>
     <tr>
-      <td><span class="commit-hash">c09b356</span></td>
+      <td><span class="commit-hash">51adec1</span></td>
       <td><span class="commit-agent">Drey</span></td>
-      <td class="commit-desc">Built core: Director agent, p5.js enhanced renderer, 20 presets, .env config</td>
+      <td class="commit-desc">Built core audit pipeline: repo fetcher, 3-pass LLM analysis, report generator with radar chart</td>
     </tr>
     <tr>
-      <td><span class="commit-hash">ff1de76</span></td>
+      <td><span class="commit-hash">bc4ddac</span></td>
       <td><span class="commit-agent">Drey</span></td>
-      <td class="commit-desc">Added procedural audio generator + 4-layer ASCII enhanced renderer</td>
+      <td class="commit-desc">Added SSE streaming, scan history, famous repo seeder, self-audit, share URLs</td>
     </tr>
     <tr>
-      <td><span class="commit-hash">e4b8768</span></td>
+      <td><span class="commit-hash">4de2b9b</span></td>
       <td><span class="commit-agent">Vex → Drey</span></td>
-      <td class="commit-desc">Vex identified p5.js 2.0 breakage. Drey fixed endShape, background, HTML escaping</td>
+      <td class="commit-desc">Vex caught JSON parsing bugs from LLM. Drey added double-parse safety and truncation recovery</td>
     </tr>
     <tr>
-      <td><span class="commit-hash">5bc9292</span></td>
+      <td><span class="commit-hash">90d948a</span></td>
       <td><span class="commit-agent">Vex → Drey</span></td>
-      <td class="commit-desc">Vex code audit → 6 bugs fixed: bloom, blob URL leaks, async error handling</td>
+      <td class="commit-desc">End-to-end pipeline test. Vex identified empty catch blocks. Drey fixed Ky.ts analysis</td>
     </tr>
     <tr>
-      <td><span class="commit-hash">0e1d7be</span></td>
-      <td><span class="commit-agent">Vex → Drey</span></td>
-      <td class="commit-desc">Vex caught stitcher CDN failure + recursion bug. Drey fixed both</td>
+      <td><span class="commit-hash">30f3e29</span></td>
+      <td><span class="commit-agent">Drey</span></td>
+      <td class="commit-desc">PR generator with 3-layer safety gates, structured rejection summaries, dry-run packages</td>
     </tr>
     <tr>
-      <td><span class="commit-hash">926bb89</span></td>
-      <td><span class="commit-agent">Echo → Drey</span></td>
-      <td class="commit-desc">Echo tested NVIDIA vision endpoint. Drey wired Image-to-Scene pipeline</td>
+      <td><span class="commit-hash">d78b726</span></td>
+      <td><span class="commit-agent">Drey</span></td>
+      <td class="commit-desc">PR publish safety gates: upstream filter, path rejection, post-fixer validation. Demo artifacts</td>
     </tr>
     <tr>
-      <td><span class="commit-hash">b313b32</span></td>
-      <td><span class="commit-agent">Drey + Herald</span></td>
-      <td class="commit-desc">Standalone export, auto-demo polish, landing page rewrite, AGENTS.md</td>
+      <td><span class="commit-hash">99e6ece</span></td>
+      <td><span class="commit-agent">Drey</span></td>
+      <td class="commit-desc">Fixed creative tool UI presets, style button regeneration. Turned a bug into a demo-ready feature</td>
     </tr>
   </table>
 </section>
 
-<!-- Generators -->
-<section class="generators container">
-  <div class="section-label">What It Makes</div>
-  <div class="section-title">Three renderers, infinite scenes</div>
-  <div class="gen-grid">
-    <div class="gen-card">
-      <div class="gen-emoji">◈</div>
-      <h4>p5.js Animations</h4>
-      <p>8 visual styles: geometric, organic, matrix, solar, cosmic, voronoi, neon, fractals — beat-synced and reactive</p>
+<!-- Features -->
+<section class="features container">
+  <div class="section-label">What It Does</div>
+  <div class="section-title">Everything you need to audit a codebase</div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-emoji">📊</div>
+      <h4>5-Axis Scoring</h4>
+      <p>Architecture, Code Quality, Security, Documentation, Maintainability — scored 0-100 with radar chart visualization</p>
     </div>
-    <div class="gen-card">
-      <div class="gen-emoji">▓</div>
-      <h4>ASCII Art</h4>
-      <p>4-layer ASCII rendering with dynamic density, contrast, and temporal shimmer — classic terminal aesthetics</p>
+    <div class="feat-card">
+      <div class="feat-emoji">🔍</div>
+      <h4>Prioritized Findings</h4>
+      <p>CRITICAL / WARNING / INFO with file locations, line numbers, and concrete fix suggestions</p>
     </div>
-    <div class="gen-card">
-      <div class="gen-emoji">♫</div>
-      <h4>Procedural Audio</h4>
-      <p>Web Audio API synthesis with beat-reactive rainbow visualizers — no audio files needed</p>
+    <div class="feat-card">
+      <div class="feat-emoji">⚡</div>
+      <h4>Live SSE Streaming</h4>
+      <p>Watch each pass's reasoning steps in real time — structural analysis, deep review, and aggregation</p>
     </div>
-    <div class="gen-card">
-      <div class="gen-emoji">🖼️</div>
-      <h4>Image-to-Scene</h4>
-      <p>Upload any photo → NVIDIA vision LLM analyzes it → Director generates a matching scene spec</p>
+    <div class="feat-card">
+      <div class="feat-emoji">🔧</div>
+      <h4>Smart PR Generation</h4>
+      <p>Safety-gated fix generation with upstream filters, path rejection, and post-fixer validation. Dry-run only — no auto-publish</p>
     </div>
-    <div class="gen-card">
-      <div class="gen-emoji">📦</div>
-      <h4>Standalone Export</h4>
-      <p>Download any scene as a single self-contained HTML file with all dependencies inlined — works offline</p>
+    <div class="feat-card">
+      <div class="feat-emoji">🏷️</div>
+      <h4>SVG Badge</h4>
+      <p>Embeddable score badge for any README. Color-coded by overall score, links back to the full report</p>
     </div>
-    <div class="gen-card">
-      <div class="gen-emoji">🎲</div>
-      <h4>20 Presets</h4>
-      <p>Built-in scenes spanning all mood × style combinations. No API key required — instant generation</p>
+    <div class="feat-card">
+      <div class="feat-emoji">📦</div>
+      <h4>Standalone Reports</h4>
+      <p>Download reports as self-contained HTML with all CSS inlined. Works offline. Printable as PDF</p>
     </div>
   </div>
 </section>
@@ -534,20 +537,20 @@
 <!-- Demo -->
 <section class="demo-section container" id="try">
 <div class="demo-embed">
-  <div class="demo-badge"><span class="live-dot"></span> Auto-play demo</div>
-  <iframe src="/ui/index.html?demo=1" title="Prompt-to-Scene Demo" loading="lazy"></iframe>
+  <div class="demo-badge"><span class="live-dot"></span> Live demo</div>
+  <iframe src="/audit" title="Archiview Auditor Demo" loading="lazy"></iframe>
  </div>
 </section>
 
 <!-- Footer CTA -->
 <section class="footer-cta container">
-  <h2>See the code. Read the story.</h2>
-  <p>Every commit, every bug fix, every feature — documented and verifiable.</p>
-  <a href="#try" class="btn btn-primary" style="font-size:1rem; padding:14px 32px">Launch the Demo →</a>
+  <h2>Audit any repo. Right now.</h2>
+  <p>No sign-up. No install. Just a URL.</p>
+  <a href="/audit" class="btn btn-primary" style="font-size:1rem; padding:14px 32px">Run an Audit →</a>
 </section>
 
 <footer class="container">
-  Prompt-to-Scene — Built entirely by <strong>autonomous AI agents</strong><br>
+  Archiview — Built entirely by <strong>autonomous AI agents</strong><br>
   <span style="opacity:0.5;margin-top:8px;display:inline-block;">
   Conceived, designed, coded, reviewed, and shipped by four AI agents working collaboratively · Zero human-written code
   </span>
