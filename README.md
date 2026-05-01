@@ -4,9 +4,9 @@
 > Point it at any public GitHub repo. It reads the codebase, analyzes architecture, scores code quality, checks for security issues, and generates a beautiful audit report — entirely autonomously.
 
 **🏆 AI Code Audit Tool Submission · Due May 3, 2026**  
-**🎯 Kimi K2.5 Track ($5k bonus) — powered by NVIDIA NIM**
+**🎯 Kimi K2.6 Track ($5k bonus) — powered by OpenRouter**
 
-[![Self Audit](http://localhost:7041/api/audit/badge?repo=coe0718/hackathon-creative)](http://localhost:7041/?repo=coe0718/hackathon-creative)
+[![Self Audit](https://audit.patchhive.dev/api/audit/badge?repo=coe0718/archiview)](https://audit.patchhive.dev/?repo=coe0718/archiview)
 
 ---
 
@@ -20,14 +20,14 @@ Archiview runs a **3-pass LLM analysis** on any public GitHub repository:
 | **2. Deep Code Review** | Source files chunked and analyzed for code quality, security, maintainability — one file at a time | ~15-60s |
 | **3. Aggregation** | All findings merged into final scores, prioritized recommendations, risks, and verdict | ~10s |
 
-**Uses Kimi K2.5** (moonshotai/kimi-k2.5) via NVIDIA NIM — a reasoning model that provides detailed, contextual analysis. Live SSE streaming shows Kimi's progress in real time.
+**Uses Kimi K2.6** via OpenRouter — a reasoning model that provides detailed, contextual analysis. Live SSE streaming shows progress in real time.
 
 ### Sample Repo Scores
 
 <!-- Famous repo results load dynamically — these are populated by the background seeder -->
 Click any to audit it yourself.
 
-[Audit expressjs/express](http://localhost:7041/?repo=expressjs/express) · [Audit facebook/react](http://localhost:7041/?repo=facebook/react) · [Audit vuejs/core](http://localhost:7041/?repo=vuejs/core) · [Audit coe0718/hackathon-creative (self-audit)](http://localhost:7041/?repo=coe0718/hackathon-creative)
+[Audit expressjs/express](https://audit.patchhive.dev/?repo=expressjs/express) · [Audit facebook/react](https://audit.patchhive.dev/?repo=facebook/react) · [Audit vuejs/core](https://audit.patchhive.dev/?repo=vuejs/core) · [Audit coe0718/archiview (self-audit)](https://audit.patchhive.dev/?repo=coe0718/archiview)
 
 ---
 
@@ -35,11 +35,11 @@ Click any to audit it yourself.
 
 ```bash
 # Clone
-git clone https://github.com/coe0718/hackathon-creative && cd hackathon-creative
+git clone https://github.com/coe0718/archiview && cd archiview
 
 # Set up API keys
 cp .env.example .env
-# Edit .env — add your NVIDIA_API_KEY (required for Kimi K2.5)
+# Edit .env — add your OPENROUTER_API_KEY (required for Kimi K2.6)
 # Also set GITHUB_TOKEN to enable PR publishing
 
 # Start (no npm install needed — zero dependencies)
@@ -67,12 +67,12 @@ open http://localhost:7041
 | **3-Pass LLM Analysis** | Structural → Deep → Aggregation pipeline |
 | **5-Axis Scoring** | Architecture, Code Quality, Security, Documentation, Maintainability (0-100) |
 | **Radar Chart** | SVG pentagon visualization in every report |
-| **Live SSE Streaming** | Watch Kimi's reasoning steps in real time |
+| **Live SSE Streaming** | Watch each pass's reasoning steps in real time |
 | **Prioritized Findings** | CRITICAL / WARNING / INFO with file locations and fix suggestions |
 | **Smart PR Generation** | Evaluates findings through safety gates (no docs, no vendor, validation required), generates unified diffs, and produces human-reviewable dry-run packages with structured rejection summaries — no auto-push, no noise |
 | **Download Report** | Standalone HTML file, all CSS inlined, no server needed |
 | **Print / Save as PDF** | Opens report in new window with print dialog |
-| **SVG Badge** | `[![Archiview](/api/audit/badge?repo=user/repo)](...)` — paste in any README |
+| **SVG Badge** | `[![Archiview](https://audit.patchhive.dev/api/audit/badge?repo=user/repo)](...)` — paste in any README |
 | **Share Links** | Add `?repo=user/repo` to URL — shareable, auto-loads and runs |
 | **Scan History** | Persisted to disk, survives restarts, shows ↑↓→ trend arrows |
 | **Famous Repo Showcase** | Background-seeded scores for Express, React, Vue, Jest |
@@ -87,7 +87,7 @@ open http://localhost:7041
 Add this badge to your project's README after running an audit:
 
 ```
-[![Archiview](https://your-server.com/api/audit/badge?repo=user/repo)](https://your-server.com/?repo=user/repo)
+[![Archiview](https://audit.patchhive.dev/api/audit/badge?repo=user/repo)](https://audit.patchhive.dev/?repo=user/repo)
 ```
 
 The badge shows the overall score (color-coded) and links back to the full report.
@@ -115,10 +115,10 @@ The badge shows the overall score (color-coded) and links back to the full repor
 | Layer | Tech |
 |-------|------|
 | **Server** | Node.js (zero npm deps) |
-| **LLM** | Kimi K2.5 (moonshotai/kimi-k2.5) via NVIDIA NIM |
-| **Fallback** | MiniMax M2.5 via OpenRouter |
+| **LLM** | Kimi K2.6 via OpenRouter |
+| **Fallback** | MiniMax M2.7 via OpenRouter |
 | **Frontend** | Pure HTML/CSS/JS (no build step) |
-| **Containers** | Docker + docker-compose |
+| **Containers** | Docker + compose |
 
 ---
 
@@ -154,22 +154,12 @@ Every line of code in this project was written by autonomous AI agents working c
 │   └── report-generator.js    # Beautiful HTML report + radar chart
 ├── ui/
 │   ├── auditor.html           # Repo Auditor UI (all-in-one)
-│   ├── landing.html           # Marketing page
-│   └── index.html             # Creative tool UI
+│   └── landing.html           # Marketing page
 ├── data/                      # Persisted scan history + famous repo cache
-├── director/                  # Director agent (creative tool)
-├── generators/                # p5.js, ASCII, audio generators
-├── sync/                      # A/V stitcher
 ├── .env.example               # API key template
 ├── Dockerfile
-└── docker-compose.yml
+└── compose.yml
 ```
-
----
-
-## Also Available
-
-This repo also contains **Prompt-to-Scene** — a creative tool that turns text, images, and audio into generative visual scenes (p5.js, ASCII art, procedural audio). 20 built-in presets work without an API key. Visit `/creative` after starting the server.
 
 ---
 
@@ -180,4 +170,4 @@ MIT
 ---
 
 > 🤖 **Built by Drey + Vex + Tuck** — autonomous AI agents
-> https://github.com/coe0718/hackathon-creative
+> https://github.com/coe0718/archiview

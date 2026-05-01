@@ -19,7 +19,7 @@ Open-source maintainers, team leads, anyone evaluating a codebase before contrib
 
 | Component | What's already built | New work |
 |---|---|---|
-| **Director agent** | LLM pipeline (MiniMax + Kimi), JSON spec parsing, validation | New system prompt for code analysis |
+| **LLM pipeline** | Kimi K2.6 + MiniMax M2.7 via OpenRouter, JSON parsing, validation | New system prompt for code analysis |
 | **Vision module** | NVIDIA llama-3.2-90b-vision for image analysis | Could analyze repo screenshots/Screenshots |
 | **Export** | Standalone HTML generation with CDN inlining | New report template (scores, charts, findings) |
 | **Server** | Express-like HTTP, POST /api/* routes | New route: POST /api/audit |
