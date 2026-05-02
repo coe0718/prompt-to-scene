@@ -62,6 +62,8 @@ nav .btn{font-size:.82rem;padding:8px 18px}
 .examples{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:.78rem;color:var(--muted)}
 .examples a{color:var(--accent2);text-decoration:none}
 .examples a:hover{text-decoration:underline}
+.example{cursor:pointer;color:var(--accent2);font-size:.78rem;transition:color .2s}
+.example:hover{color:var(--accent);text-decoration:underline}
 
 /* ─── HISTORY ─── */
 .history-card{padding:16px;border-radius:12px;background:var(--surface);border:1px solid var(--border)}
@@ -227,11 +229,11 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
     </div>
     <div class="examples">
       <span>try:</span>
-      <a href="/audit?repo=expressjs/express">expressjs/express</a>
-      <a href="/audit?repo=facebook/react">facebook/react</a>
-      <a href="/audit?repo=nousresearch/hermes-agent">nousresearch/hermes-agent</a>
-      <a href="/audit?repo=prettier/prettier">prettier/prettier</a>
-      <a href="/audit?repo=coe0718/archiview" style="color:var(--green)">self-audit</a>
+      <span class="example" onclick="setRepo('expressjs/express')">expressjs/express</span>
+      <span class="example" onclick="setRepo('facebook/react')">facebook/react</span>
+      <span class="example" onclick="setRepo('nousresearch/hermes-agent')">nousresearch/hermes-agent</span>
+      <span class="example" onclick="setRepo('prettier/prettier')">prettier/prettier</span>
+      <span class="example" onclick="setRepo('coe0718/archiview')" style="color:var(--green)">self-audit</span>
     </div>
   </div>
 
@@ -364,6 +366,11 @@ function selectFileCount(el, count) {
   document.querySelectorAll('.file-chip').forEach(function(c) { c.classList.remove('active'); });
   el.classList.add('active');
   window._selectedFileCount = count;
+}
+
+function setRepo(repo) {
+  document.getElementById('repo-input').value = repo;
+  goAudit();
 }
 
 function escHtml(s) {
@@ -520,6 +527,15 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('repo-input').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') goAudit();
   });
+
+  // Auto-run from URL param
+  var params = new URLSearchParams(window.location.search);
+  var repoParam = params.get('repo');
+  if (repoParam) {
+    document.getElementById('repo-input').value = repoParam;
+    setTimeout(goAudit, 300);
+  }
+
   loadHistory();
   populateTerminal();
   setInterval(loadHistory, 15000);
