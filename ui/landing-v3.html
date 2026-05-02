@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Archiview — Autonomous Code Review by AI Agents</title>
+<meta name="description" content="Point Archiview at any GitHub repo. It reads your code, finds the bugs, scores quality across 5 axes, and generates fix plans — all autonomously.">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+:root{--bg:#04060b;--surface:rgba(255,255,255,0.03);--surface2:rgba(255,255,255,0.06);--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);--text:#eef0f6;--muted:#7a8296;--dim:#3d4358;--accent:#7c5cfc;--accent2:#a78bfa;--accent3:#5ce1e6;--green:#4ade80;--amber:#fbbf24;--pink:#fc5c7d;--radius:12px;--radius-lg:20px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+
+/* ─── AMBIENT BG ─── */
+.bg{position:fixed;inset:0;z-index:-2;background:
+radial-gradient(ellipse 70% 50% at 20% 20%,rgba(124,92,252,0.1) 0%,transparent 50%),
+radial-gradient(ellipse 60% 45% at 80% 80%,rgba(92,225,230,0.06) 0%,transparent 50%),
+radial-gradient(ellipse 40% 40% at 50% 50%,rgba(252,92,125,0.04) 0%,transparent 45%),
+var(--bg);
+animation:ambient 25s ease-in-out infinite alternate}
+@keyframes ambient{0%{filter:hue-rotate(-15deg) saturate(0.8)}50%{filter:hue-rotate(20deg) saturate(1.15)}100%{filter:hue-rotate(-5deg) saturate(0.9)}}
+.grid-overlay{position:fixed;inset:0;z-index:-1;opacity:.03;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:60px 60px;pointer-events:none}
+
+/* ─── UTILITY ─── */
+.container{max-width:1120px;margin:0 auto;padding:0 24px}
+.section{padding:100px 0}
+.section-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.14em;color:var(--accent2);margin-bottom:8px;font-weight:600;text-align:center}
+.section-title{font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:900;letter-spacing:-0.04em;margin-bottom:50px;text-align:center;line-height:1.15}
+.section-title em{font-style:normal;background:linear-gradient(135deg,var(--accent2),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* ─── NAV ─── */
+nav{padding:16px 0;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:1.2rem;font-weight:900;letter-spacing:-0.04em;font-family:'JetBrains Mono',monospace}
+.logo span{color:var(--accent)}
+.logo small{font-size:.6rem;color:var(--dim);font-weight:400;letter-spacing:.02em;margin-left:4px}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:.85rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+nav .btn{font-size:.82rem;padding:8px 18px}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:8px;font-size:.88rem;font-weight:600;text-decoration:none;cursor:pointer;border:none;transition:all .25s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#6a4be0);color:#fff;box-shadow:0 2px 20px rgba(124,92,252,0.25)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 4px 30px rgba(124,92,252,0.35)}
+.btn-glass{background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);backdrop-filter:blur(12px)}
+.btn-glass:hover{border-color:var(--accent);color:var(--accent2);transform:translateY(-1px)}
+.btn-terminal{background:var(--bg);border:1px solid var(--dim);color:var(--green);font-family:'JetBrains Mono',monospace;font-size:.82rem}
+.btn-terminal:hover{border-color:var(--green);box-shadow:0 0 20px rgba(74,222,128,0.1)}
+
+/* ─── AUDIT CARD ─── */
+.audit-card .input-group{display:flex;gap:8px;margin-bottom:12px}
+.audit-card input{flex:1;padding:14px 18px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:1rem;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s}
+.audit-card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,252,0.1)}
+.audit-card input::placeholder{color:var(--dim)}
+.audit-options{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.audit-options label{font-size:.78rem;color:var(--muted)}
+.file-chips{display:flex;gap:4px}
+.file-chip{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--muted);font-size:.78rem;cursor:pointer;transition:all .2s;user-select:none}
+.file-chip:hover{border-color:var(--accent);color:var(--text);background:rgba(124,92,252,0.08)}
+.file-chip.active{border-color:var(--accent);background:rgba(124,92,252,0.15);color:var(--accent);font-weight:600}
+.file-hint{font-size:.72rem;color:var(--dim)}
+.examples{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:.78rem;color:var(--muted)}
+.examples a{color:var(--accent2);text-decoration:none}
+.examples a:hover{text-decoration:underline}
+
+/* ─── HISTORY ─── */
+.history-card{padding:16px;border-radius:12px;background:var(--surface);border:1px solid var(--border)}
+.history-card h3{font-size:.82rem;font-weight:600;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.history-item{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:.8rem;border-bottom:1px solid var(--border);cursor:pointer;transition:color .2s}
+.history-item:last-child{border-bottom:none}
+.history-item:hover{color:var(--accent)}
+.h-item-repo{font-family:'JetBrains Mono',monospace;font-size:.8rem;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-item-score{font-weight:700;font-size:.84rem;padding:1px 8px;border-radius:5px;background:var(--surface);border:1px solid var(--border);min-width:28px;text-align:center}
+.history-empty{color:var(--muted);font-size:.78rem;text-align:center;padding:12px 0}
+
+/* ─── HERO ─── */
+.hero{padding:90px 0 50px;text-align:center;position:relative}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.15);font-size:.7rem;color:var(--accent2);letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:24px}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.hero h1{font-size:clamp(2.8rem,7.5vw,5rem);font-weight:900;letter-spacing:-0.06em;line-height:1.0;margin-bottom:18px;background:linear-gradient(135deg,#fff 20%,var(--accent2) 55%,var(--accent3) 90%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-size:250% auto;animation:gradientShift 7s ease infinite}
+@keyframes gradientShift{0%,100%{background-position:0% center}50%{background-position:100% center}}
+.hero .sub{font-size:1.05rem;color:var(--muted);max-width:600px;margin:0 auto 12px;line-height:1.7}
+.hero .tagline{font-size:.9rem;color:var(--accent3);margin:0 auto 32px;font-family:'JetBrains Mono',monospace;font-weight:500}
+.hero-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* ─── TERMINAL STRIP ─── */
+.terminal-strip{max-width:640px;margin:40px auto 0;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;font-family:'JetBrains Mono',monospace;font-size:.75rem;text-align:left}
+.terminal-bar{display:flex;align-items:center;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);gap:8px}
+.term-dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.term-dot.r{background:#ff5f57}
+.term-dot.y{background:#febc2e}
+.term-dot.g{background:#28c840}
+.terminal-body{padding:14px 16px;line-height:1.8;white-space:pre-wrap;word-break:break-all}
+.terminal-body .prompt{color:var(--green)}
+.terminal-body .cmd{color:var(--text)}
+.terminal-body .out{color:var(--muted)}
+.terminal-body .highlight{color:var(--accent2);font-weight:600}
+.terminal-cursor{display:inline-block;width:7px;height:14px;background:var(--accent);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ─── STATS ─── */
+.stats-row{display:flex;justify-content:center;gap:48px;padding:40px 0 60px;flex-wrap:wrap}
+.stat-box{text-align:center}
+.stat-num{font-size:2.6rem;font-weight:900;letter-spacing:-0.05em;font-family:'JetBrains Mono',monospace}
+.stat-num.accent{color:var(--accent2)}
+.stat-num.green{color:var(--green)}
+.stat-num.amber{color:var(--amber)}
+.stat-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+
+/* ─── PIPELINE ─── */
+.pipeline{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.pipe-card{padding:28px 24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);transition:all .3s;position:relative}
+.pipe-card:hover{border-color:rgba(124,92,252,0.3);transform:translateY(-3px);box-shadow:0 12px 40px -15px rgba(124,92,252,0.15)}
+.pipe-step{position:absolute;top:12px;right:16px;font-size:.65rem;font-weight:700;color:var(--dim);letter-spacing:.12em;font-family:'JetBrains Mono',monospace}
+.pipe-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin-bottom:14px;background:rgba(124,92,252,0.1);border:1px solid rgba(124,92,252,0.12)}
+.pipe-card h4{font-size:.95rem;font-weight:700;margin-bottom:6px}
+.pipe-card p{font-size:.82rem;color:var(--muted);line-height:1.6}
+.pipe-model{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--dim);margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.pipe-model span{color:var(--accent2)}
+.divider-arrow{text-align:center;padding:0;color:var(--dim);font-size:1.2rem}
+
+/* ─── FEATURES ─── */
+.feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.feat-card{padding:26px 22px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);transition:all .3s;position:relative;overflow:hidden}
+.feat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;transition:opacity .3s}
+.feat-card:hover::before{opacity:1}
+.feat-card:hover{border-color:rgba(124,92,252,0.25);transform:translateY(-2px);box-shadow:0 8px 30px -10px rgba(124,92,252,0.12)}
+.feat-emoji{font-size:1.5rem;margin-bottom:10px;display:block}
+.feat-card h4{font-size:.9rem;font-weight:700;margin-bottom:4px}
+.feat-card p{font-size:.8rem;color:var(--muted);line-height:1.6}
+
+/* ─── AGENTS ─── */
+.agent-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:800px){.agent-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:500px){.agent-grid{grid-template-columns:1fr}}
+.agent-card{padding:24px 20px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);transition:all .3s}
+.agent-card:hover{border-color:rgba(124,92,252,0.3);transform:translateY(-3px)}
+.agent-avatar{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:12px;background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.12)}
+.agent-card h3{font-size:.95rem;font-weight:700;margin-bottom:1px}
+.agent-role{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent2);margin-bottom:8px;font-weight:600}
+.agent-card p{font-size:.8rem;color:var(--muted);line-height:1.6}
+.agent-stat{font-size:.72rem;color:var(--amber);margin-top:8px;font-family:'JetBrains Mono',monospace}
+
+/* ─── TIMELINE ─── */
+.timeline{position:relative;max-width:680px;margin:0 auto}
+.timeline::before{content:'';position:absolute;left:18px;top:6px;bottom:6px;width:2px;background:linear-gradient(180deg,var(--accent),var(--accent3))}
+.tl-item{position:relative;padding:0 0 36px 52px}
+.tl-item:last-child{padding-bottom:0}
+.tl-dot{position:absolute;left:11px;top:4px;width:16px;height:16px;border-radius:50%;background:var(--bg);border:3px solid var(--accent)}
+.tl-day{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--accent2);margin-bottom:2px;font-weight:600;font-family:'JetBrains Mono',monospace}
+.tl-item h3{font-size:.92rem;font-weight:700;margin-bottom:3px}
+.tl-item p{font-size:.8rem;color:var(--muted);line-height:1.6}
+
+/* ─── COMMITS ─── */
+.commit-table{width:100%;max-width:780px;margin:40px auto 0;border-collapse:collapse;font-size:.82rem}
+.commit-table th{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
+.commit-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+.c-hash{font-family:'JetBrains Mono',monospace;color:var(--green);font-size:.74rem;white-space:nowrap}
+.c-agent{font-size:.74rem;color:var(--accent2)}
+.c-desc{color:var(--text);max-width:360px}
+tr:hover td{background:var(--surface)}
+
+/* ─── DEMO EMBED ─── */
+.demo-wrap{border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);background:var(--surface);box-shadow:0 40px 100px -25px rgba(0,0,0,0.6)}
+.demo-wrap iframe{width:100%;height:500px;border:none;display:block}
+
+/* ─── CTA ─── */
+.cta{padding:100px 0;text-align:center;border-top:1px solid var(--border);position:relative}
+.cta::before{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:200px;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.cta h2{font-size:2.4rem;font-weight:900;letter-spacing:-0.04em;margin-bottom:10px}
+.cta p{color:var(--muted);margin-bottom:28px;font-size:1rem}
+
+/* ─── FOOTER ─── */
+footer{padding:30px 0;text-align:center;font-size:.78rem;color:var(--muted);border-top:1px solid var(--border)}
+footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 12px;border-radius:99px;background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.12);font-size:.72rem;color:var(--accent2);font-family:'JetBrains Mono',monospace}
+@media(max-width:640px){
+  .nav-links{display:none}
+  .hero{padding:60px 0 30px}
+  .hero h1{font-size:2.2rem}
+  .feat-grid{grid-template-columns:repeat(2,1fr)}
+  .stats-row{gap:28px}
+  .stat-num{font-size:2rem}
+  .pipeline{grid-template-columns:1fr}
+  .demo-wrap iframe{height:360px}
+  .cta h2{font-size:1.6rem}
+}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="grid-overlay"></div>
+
+<!-- ─── NAV ─── -->
+<nav class="container">
+  <div class="logo">archi<span>view</span><small>α</small></div>
+  <div class="nav-links">
+    <a href="#pipeline">Pipeline</a>
+    <a href="#features">Features</a>
+    <a href="#agents">→ Agents</a>
+    <a href="/audit" style="color:var(--accent2);font-weight:600;">Launch →</a>
+  </div>
+  <a href="/audit" class="btn btn-primary">Run an Audit →</a>
+</nav>
+
+<!-- ─── HERO ─── -->
+<section class="hero container">
+  <div class="hero-badge"><span class="badge-dot"></span> Built by Hermes Autonomous Agents</div>
+  <h1>Point it at a repo.<br>It reads the code.</h1>
+  <p class="sub">Archiview analyzes any public GitHub repo — architecture, code quality, security, docs, maintainability. Scores, findings, fix plans. All by AI, zero human code.</p>
+
+  <div class="audit-card" style="max-width:640px;margin:28px auto 0;text-align:left">
+    <div class="input-group">
+      <input id="repo-input" type="text" placeholder="user/repo or full GitHub URL" autofocus>
+      <button class="btn btn-primary" onclick="goAudit()" style="padding:14px 24px;flex-shrink:0;">Audit →</button>
+    </div>
+    <div class="audit-options">
+      <label>Files to analyze:</label>
+      <div class="file-chips" id="file-chips">
+        <span class="file-chip active" data-value="10" onclick="selectFileCount(this,10)">10</span>
+        <span class="file-chip" data-value="25" onclick="selectFileCount(this,25)">25</span>
+        <span class="file-chip" data-value="50" onclick="selectFileCount(this,50)">50</span>
+        <span class="file-chip" data-value="100" onclick="selectFileCount(this,100)">100</span>
+        <span class="file-chip" data-value="9999" onclick="selectFileCount(this,9999)" title="Analyze all important files">Full</span>
+      </div>
+      <span class="file-hint">More files = slower but deeper analysis · Full scans all source files</span>
+    </div>
+    <div class="examples">
+      <span>try:</span>
+      <a href="/audit?repo=expressjs/express">expressjs/express</a>
+      <a href="/audit?repo=facebook/react">facebook/react</a>
+      <a href="/audit?repo=nousresearch/hermes-agent">nousresearch/hermes-agent</a>
+      <a href="/audit?repo=prettier/prettier">prettier/prettier</a>
+      <a href="/audit?repo=coe0718/archiview" style="color:var(--green)">self-audit</a>
+    </div>
+  </div>
+
+  <div class="terminal-strip" style="margin-top:32px;max-width:640px">
+    <div class="terminal-bar">
+      <div class="term-dot r"></div>
+      <div class="term-dot y"></div>
+      <div class="term-dot g"></div>
+      <span style="font-size:.7rem;color:var(--dim);margin-left:6px">archiview — terminal</span>
+    </div>
+    <div class="terminal-body" id="terminal-body">
+<span class="prompt">$</span> <span class="cmd">./archiview audit coe0718/archiview</span>
+<span class="out">┌─ Structural Analysis ───────────────── <span class="highlight">done</span></span>
+<span class="out">├─ Deep Code Review (24 files) ────────── <span class="highlight">done</span></span>
+<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>
+<span class="out">└─ Overall Score: <span class="highlight">87/100</span> · 3 findings · 0 critical</span>
+<span class="prompt">$</span> <span class="cmd">cat report.html</span>
+<span class="out">→ Report ready: <span class="highlight">reports/coe0718-archiview-20260430.html</span></span>
+<span class="prompt">$</span> <span class="cmd" id="cursor-line">open report.html</span><span class="terminal-cursor"></span>
+    </div>
+  </div>
+
+  <div class="history-card" style="margin:16px auto 0;max-width:640px">
+    <h3>🕐 Recent Audits</h3>
+    <div id="recent-audits">
+      <div class="history-empty">No audits yet — be the first</div>
+    </div>
+  </div>
+
+  <!-- ─── INLINE REPORT ─── -->
+  <div id="report-area" style="display:none;max-width:960px;margin:24px auto 0;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);background:var(--surface);box-shadow:0 40px 100px -25px rgba(0,0,0,0.6)"></div>
+</section>
+
+<!-- ─── STATS ─── -->
+<div class="stats-row container">
+  <div class="stat-box"><div class="stat-num accent">4</div><div class="stat-label">AI Agents</div></div>
+  <div class="stat-box"><div class="stat-num green">5</div><div class="stat-label">Days to Ship</div></div>
+  <div class="stat-box"><div class="stat-num amber">21+</div><div class="stat-label">Commits</div></div>
+  <div class="stat-box"><div class="stat-num accent">0</div><div class="stat-label">Human Lines</div></div>
+  <div class="stat-box"><div class="stat-num green">3</div><div class="stat-label">Pass Pipeline</div></div>
+  <div class="stat-box"><div class="stat-num amber">5</div><div class="stat-label">Score Axes</div></div>
+</div>
+
+<!-- ─── PIPELINE ─── -->
+<section class="section container" id="pipeline">
+  <div class="section-label">How It Works</div>
+  <div class="section-title">Three passes. One <em>verdict</em>.</div>
+  <div class="pipeline">
+    <div class="pipe-card"><span class="pipe-step">01</span><div class="pipe-icon">🔭</div><h4>Structural Analysis</h4><p>Reads README, config files, directory tree, build system. Maps architecture, framework, and language before touching any source code.</p><div class="pipe-model">model: <span>Kimi K2.6</span></div></div>
+    <div class="pipe-card"><span class="pipe-step">02</span><div class="pipe-icon">🔬</div><h4>Deep Code Review</h4><p>Every source file chunked and analyzed for code quality, security vulnerabilities, maintainability, and anti-patterns. One file at a time.</p><div class="pipe-model">model: <span>MiniMax M2.7</span></div></div>
+    <div class="pipe-card"><span class="pipe-step">03</span><div class="pipe-icon">🧠</div><h4>Aggregation</h4><p>All findings merged into prioritized scores across 5 axes. Generates the final report with radar chart, embeddable badge, and optional fix PR.</p><div class="pipe-model">model: <span>Kimi K2.6</span></div></div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ─── -->
+<section class="section container" id="features">
+  <div class="section-label">Capabilities</div>
+  <div class="section-title">Everything to <em>understand</em> a codebase</div>
+  <div class="feat-grid">
+    <div class="feat-card"><span class="feat-emoji">📊</span><h4>5-Axis Scoring</h4><p>Architecture, Code Quality, Security, Documentation, Maintainability — each scored 0-100 with auto-generated SVG radar chart.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🔍</span><h4>Prioritized Findings</h4><p>CRITICAL / WARNING / INFO with exact file paths, line numbers, and concrete fix suggestions you can act on immediately.</p></div>
+    <div class="feat-card"><span class="feat-emoji">⚡</span><h4>Live Streaming</h4><p>Watch each pass execute in real time via SSE — structural scan, per-file deep analysis, final aggregation. No blind waiting.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🔧</span><h4>Smart PR Generation</h4><p>3-layer safety gates: upstream filter → selector → post-fixer validation. Dry-run only — you decide when to publish.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🏷️</span><h4>SVG Score Badge</h4><p>Embeddable badge for any README. Color-coded by overall score, links back to the full report. Show your quality.</p></div>
+    <div class="feat-card"><span class="feat-emoji">📦</span><h4>Standalone Reports</h4><p>Self-contained HTML with all CSS inlined. Download, print as PDF, share a link. Works offline, forever.</p></div>
+    <div class="feat-card"><span class="feat-emoji">📈</span><h4>Historical Trends</h4><p>Re-audit any repo to track score changes over time. See if your architecture, security, and code quality are improving or slipping.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🏆</span><h4>Famous Benchmarks</h4><p>Pre-loaded audits of React, Express, Prettier, and more. Compare your project's scores against industry-leading open-source codebases.</p></div>
+  </div>
+</section>
+
+<!-- ─── AGENTS ─── -->
+<section class="section container" id="agents">
+  <div class="section-label">The Team</div>
+  <div class="section-title">Four agents. Zero human <em>code</em>.</div>
+  <div class="agent-grid">
+    <div class="agent-card"><div class="agent-avatar">🛠️</div><h3>Drey</h3><div class="agent-role">Coding Specialist</div><p>Built the entire server, 3-pass LLM pipeline, repo fetcher, report generator with SVG charts, badge endpoint, scan history, PR generator, and Docker deploy.</p><div class="agent-stat">15+ commits</div></div>
+    <div class="agent-card"><div class="agent-avatar">🔍</div><h3>Vex</h3><div class="agent-role">Code Reviewer</div><p>Reviewed every PR. Caught critical bugs in JSON parsing, LLM response truncation, and error handling paths. Enforced modular architecture across the entire server.</p><div class="agent-stat">4 code reviews</div></div>
+    <div class="agent-card"><div class="agent-avatar">🔬</div><h3>Scout</h3><div class="agent-role">Scout / Researcher</div><p>Tested LLM models across providers, validated Kimi K2.6 and MiniMax M2.7 for pipeline roles, scouted rate limits and response quality.</p><div class="agent-stat">Research reports</div></div>
+    <div class="agent-card"><div class="agent-avatar">📝</div><h3>Herald</h3><div class="agent-role">Documentarian</div><p>Wrote README, landing pages, submission materials. Documented architecture, API endpoints, deployment. Authored this page.</p><div class="agent-stat">Documentation</div></div>
+  </div>
+  <div style="text-align:center;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted)">
+    Orchestrated by <strong style="color:var(--accent2)">Tuck</strong> — the director agent who guided every decision, review, and ship
+  </div>
+</section>
+
+<!-- ─── TIMELINE ─── -->
+<section class="section container" id="timeline">
+  <div class="section-label">Development</div>
+  <div class="section-title">5 days. 21+ commits. <em>All AI</em>.</div>
+  <div class="timeline">
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">DAY 1</div><h3>Pipeline Design</h3><p>Scout scouted LLM providers. Drey designed the 3-pass pipeline, built the repo fetcher and GitHub API integration.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">DAY 2</div><h3>Analysis Engine</h3><p>Drey built chunked analysis, 5-axis scoring, SSE streaming. Integrated Kimi K2.6 for structure and MiniMax M2.7 for deep review.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">DAY 3</div><h3>Reports + UI</h3><p>Drey built the report generator with SVG radar chart, auditor UI with live streaming, scan history, and shareable repo links.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">DAY 4</div><h3>PR Generation</h3><p>Drey built the 3-layer safety-gated PR generator. Vex caught truncation bugs. Scout tested end-to-end.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">DAY 5</div><h3>Ship</h3><p>SVG badge, Docker compose, self-audit. Vex validated error paths. Herald wrote docs and landing page.</p></div>
+  </div>
+</section>
+
+<!-- ─── COMMITS ─── -->
+<section class="section container" id="proof">
+  <div class="section-label">Proof</div>
+  <div class="section-title">Every commit was <em>AI-authored</em></div>
+  <table class="commit-table">
+    <tr><th>Commit</th><th>Agent</th><th>What Happened</th></tr>
+    <tr><td><span class="c-hash">51adec1</span></td><td><span class="c-agent">Drey</span></td><td class="c-desc">Core pipeline: repo fetcher, 3-pass LLM analysis, report generator with radar chart</td></tr>
+    <tr><td><span class="c-hash">bc4ddac</span></td><td><span class="c-agent">Drey</span></td><td class="c-desc">SSE streaming, scan history, famous repo seeder, self-audit, share URLs</td></tr>
+    <tr><td><span class="c-hash">4de2b9b</span></td><td><span class="c-agent">Vex → Drey</span></td><td class="c-desc">Vex caught JSON parsing bugs. Drey added double-parse safety + truncation recovery</td></tr>
+    <tr><td><span class="c-hash">30f3e29</span></td><td><span class="c-agent">Drey</span></td><td class="c-desc">PR generator with 3-layer safety gates, structured rejection summaries, dry-run packages</td></tr>
+    <tr><td><span class="c-hash">d78b726</span></td><td><span class="c-agent">Vex → Drey</span></td><td class="c-desc">PR publish safety gates: upstream filter, path rejection, post-fixer validation. Demo artifacts</td></tr>
+  </table>
+</section>
+
+<!-- ─── CTA ─── -->
+<section class="cta">
+  <div class="container">
+    <h2>Audit any repo. Right now.</h2>
+    <p>No sign-up. No install. Just paste a GitHub URL.</p>
+    <a href="/audit" class="btn btn-primary" style="font-size:1rem;padding:14px 36px">Run an Audit →</a>
+  </div>
+</section>
+
+<footer>
+  <div style="margin-bottom:6px;">Archiview — Built entirely by <strong>autonomous AI agents</strong></div>
+  <div class="hermes">🤖 designed by hermes agents</div>
+</footer>
+<script>
+window._selectedFileCount = 10;
+
+function selectFileCount(el, count) {
+  document.querySelectorAll('.file-chip').forEach(function(c) { c.classList.remove('active'); });
+  el.classList.add('active');
+  window._selectedFileCount = count;
+}
+
+function goAudit() {
+  var val = document.getElementById('repo-input').value.trim();
+  if (!val) { window.location.href = '/audit'; return; }
+  var match = val.match(/(?:github\.com\/)?([\w.-]+\/[\w.-]+?)(?:\/|$)/);
+  var repo = match ? match[1] : val;
+
+  // Show terminal with loading state
+  var term = document.getElementById('terminal-body');
+  var cursor = document.getElementById('cursor-line');
+  var reportArea = document.getElementById('report-area');
+  reportArea.innerHTML = '';
+  reportArea.style.display = 'none';
+  if (cursor) cursor.innerHTML = '';
+  term.innerHTML = '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
+    '<span class="out">┌─ Connecting to API...</span>\n' +
+    '<span class="prompt">$</span> <span class="cmd">waiting for response</span><span class="terminal-cursor"></span>';
+
+  // POST to /api/audit with SSE streaming
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/audit', true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.setRequestHeader('Accept', 'text/event-stream');
+
+  var buffer = '';
+  xhr.onprogress = function() {
+    buffer += xhr.responseText.substring(buffer.length);
+    var lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    var eventType = '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line.startsWith('event: ')) {
+        eventType = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        try {
+          var data = JSON.parse(line.slice(6));
+          handleSSEEvent(eventType, data, repo, term);
+        } catch(e) {}
+      }
+    }
+  };
+
+  xhr.onloadend = function() {
+    // Flush remaining buffer
+    var lines = buffer.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line.startsWith('data: ')) {
+        try {
+          var data = JSON.parse(line.slice(6));
+          handleSSEEvent(data.event || 'complete', data, repo, term);
+        } catch(e) {}
+      }
+    }
+  };
+
+  xhr.send(JSON.stringify({ repo: repo, maxFiles: window._selectedFileCount || 10 }));
+}
+
+function handleSSEEvent(eventType, data, repo, term) {
+  if (eventType === 'progress') {
+    var icons = { fetch: '📦', structural: '🔭', report: '🧠' };
+    var icon = icons[data.step] || '⚡';
+    term.innerHTML =
+      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
+      '<span class="out">' + icon + ' ' + (data.message || data.step) + '</span>\n' +
+      '<span class="prompt">$</span> <span class="cmd">working...</span><span class="terminal-cursor"></span>';
+  } else if (eventType === 'complete' && data.html) {
+    term.innerHTML =
+      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
+      '<span class="out">┌─ Structural Analysis ───────────────── <span class="highlight">done</span></span>\n' +
+      '<span class="out">├─ Deep Code Review ───────────────────── <span class="highlight">done</span></span>\n' +
+      '<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>\n' +
+      '<span class="out">└─ Report <span class="highlight">ready</span></span>\n' +
+      '<span class="prompt">$</span> <span class="cmd">Report loaded below</span>';
+
+    // Render the report HTML in the report area
+    var reportArea = document.getElementById('report-area');
+    reportArea.innerHTML = data.html;
+    reportArea.style.display = 'block';
+
+    // Refresh history
+    if (typeof loadHistory === 'function') loadHistory();
+  } else if (eventType === 'error') {
+    term.innerHTML =
+      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
+      '<span class="out" style="color:var(--pink)">✖ Error: ' + (data.message || 'Unknown error') + '</span>\n' +
+      '<span class="prompt">$</span> <span class="cmd" id="cursor-line">try again with a smaller repo</span><span class="terminal-cursor"></span>';
+  }
+}
+
+async function loadHistory() {
+  try {
+    var resp = await fetch('/api/audit/history');
+    if (!resp.ok) return;
+    var history = await resp.json();
+    var list = document.getElementById('recent-audits');
+    if (!history || history.length === 0) {
+      list.innerHTML = '<div class="history-empty">No audits yet — be the first</div>';
+      return;
+    }
+    list.innerHTML = history.slice(0, 5).map(function(h) {
+      var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--pink)';
+      var badge = h.critical > 0 ? ' <span style="color:var(--pink);font-size:.68rem;">' + h.critical + '</span>' : '';
+      var trend = h.trend === 'up' ? '<span style="color:var(--green)">↑</span>' : h.trend === 'down' ? '<span style="color:var(--pink)">↓</span>' : '';
+      return '<div class="history-item" onclick="window.location.href=\'/audit?repo=' + encodeURIComponent(h.repo) + '\'">' +
+        '<span class="h-item-repo">' + (h.full_name || h.repo) + '</span>' +
+        '<span class="h-item-score" style="color:' + scoreColor + '">' + (h.overall || '—') + '</span>' +
+        '<span style="font-size:.7rem;margin-left:2px">' + trend + '</span>' +
+        '</div>';
+    }).join('');
+  } catch(e) {
+    // Silent
+  }
+}
+
+async function populateTerminal() {
+  try {
+    var resp = await fetch('/api/audit/history');
+    if (!resp.ok) return;
+    var history = await resp.json();
+    if (!history || history.length === 0) return;
+    var h = history[0];
+    var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--pink)';
+    var term = document.getElementById('terminal-body');
+    if (!term) return;
+    term.innerHTML =
+      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + (h.full_name || h.repo) + '</span>\n' +
+      '<span class="out">┌─ Structural Analysis ───────────────── <span class="highlight">done</span></span>\n' +
+      '<span class="out">├─ Deep Code Review (' + (h.files_analyzed || '—') + ' files) ─ <span class="highlight">done</span></span>\n' +
+      '<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>\n' +
+      '<span class="out">└─ Overall Score: <span class="highlight" style="color:' + scoreColor + '">' + (h.overall || '—') + '/100</span> · ' + (h.findings || '—') + ' findings · ' + (h.critical || '0') + ' critical</span>';
+  } catch(e) {
+    // Keep static fallback
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('repo-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') goAudit();
+  });
+  loadHistory();
+  populateTerminal();
+  setInterval(loadHistory, 15000);
+});
+</script>
+</body>
+</html>
