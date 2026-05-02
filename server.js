@@ -448,9 +448,9 @@ if (url.pathname === '/creative') {
   return serveFile(res, path.join(ROOT, 'ui', 'index.html'));
 }
 
-// ── Repo Auditor page ──────────────────────────────────────────────────
+// ── Landing page (v3) — both / and /audit ──
 if (url.pathname === '/audit') {
-  return serveFile(res, path.join(ROOT, 'ui', 'auditor.html'));
+  return serveFile(res, path.join(ROOT, 'ui', 'landing-v3.html'));
 }
 
  // ── Landing page (v3) — primary entry ──
