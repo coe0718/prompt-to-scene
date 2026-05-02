@@ -98,11 +98,15 @@ nav .btn{font-size:.82rem;padding:8px 18px}
 .term-dot.r{background:#ff5f57}
 .term-dot.y{background:#febc2e}
 .term-dot.g{background:#28c840}
-.terminal-body{padding:14px 16px;line-height:1.8;white-space:pre-wrap;word-break:break-all}
+.terminal-body{padding:14px 16px;line-height:1.8;white-space:pre-wrap;word-break:break-all;max-height:280px;overflow-y:auto}
 .terminal-body .prompt{color:var(--green)}
 .terminal-body .cmd{color:var(--text)}
 .terminal-body .out{color:var(--muted)}
 .terminal-body .highlight{color:var(--accent2);font-weight:600}
+.terminal-body .ok{color:var(--green)}
+.terminal-body .warn{color:var(--amber)}
+.terminal-body .err{color:var(--red)}
+.terminal-body .dim{color:var(--dim)}
 .terminal-cursor{display:inline-block;width:7px;height:14px;background:var(--accent);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 
@@ -494,6 +498,33 @@ function renderReport(html) {
   result.style.display = 'block';
 }
 
+function terminalEl() {
+  return document.getElementById('terminal-body');
+}
+
+function resetTerminal(repo) {
+  var term = terminalEl();
+  if (!term) return;
+  term.innerHTML =
+    '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + escHtml(cleanRepo(repo) || repo) + '</span>\n' +
+    '<span class="out">⟳ Initializing audit stream...</span>\n';
+  term.scrollTop = term.scrollHeight;
+}
+
+function writeTerminal(text, cls) {
+  var term = terminalEl();
+  if (!term) return;
+  term.insertAdjacentHTML('beforeend', '<span class="' + (cls || 'out') + '">' + escHtml(text) + '</span>\n');
+  term.scrollTop = term.scrollHeight;
+}
+
+function writeTerminalHtml(html) {
+  var term = terminalEl();
+  if (!term) return;
+  term.insertAdjacentHTML('beforeend', html + '\n');
+  term.scrollTop = term.scrollHeight;
+}
+
 function selectFileCount(el, val) {
   document.querySelectorAll('.file-chip').forEach(function(c) { c.classList.remove('active'); });
   el.classList.add('active');
@@ -502,6 +533,8 @@ function selectFileCount(el, val) {
 
 function loadCachedReport(repo) {
   setRepo(repo);
+  resetTerminal(repo);
+  writeTerminal('↳ Checking local report cache...', 'dim');
   setProgressVisible(true, false);
   document.getElementById('progress-track').style.display = 'none';
   document.getElementById('status').innerHTML = '<span class="spinner"></span> Loading cached report...';
@@ -519,11 +552,13 @@ function loadCachedReport(repo) {
       document.getElementById('status').innerHTML = '<span style="color:var(--green);">✓ Loaded cached report for ' + escHtml(repo) + '</span>';
       lastAuditedRepo = repo;
       document.getElementById('pr-section').style.display = 'block';
-      populateTerminal(repo);
+      writeTerminal('✓ Cached report loaded.', 'ok');
+      writeTerminal('→ Report mounted below.', 'out');
     })
     .catch(function() {
       // No cached report — run fresh audit
       document.getElementById('status').innerHTML = 'No cached report found. Running fresh audit...';
+      writeTerminal('↳ No cached report found. Starting fresh audit...', 'warn');
       runAudit();
     });
 }
@@ -555,6 +590,7 @@ async function runAudit() {
   progressTrack.style.display = 'block';
   progressFill.style.width = '0%';
   lastReportHtml = '';
+  resetTerminal(repo);
 
   function setStep(id, state) {
     const el = document.getElementById(id);
@@ -584,6 +620,7 @@ async function runAudit() {
     }
     status.innerHTML = '<span class="spinner"></span> ' + escHtml(msg);
     status.appendChild(timerEl);
+    writeTerminal('[' + (step || 'status') + '] ' + msg, 'out');
     // Update progress bar
     var fillPct = { fetch: 25, structural: 50, deep: 75, aggregation: 85, report: 100 };
     if (fillPct[step]) progressFill.style.width = fillPct[step] + '%';
@@ -595,6 +632,7 @@ async function runAudit() {
     progressFill.style.width = '25%';
     status.innerHTML = '<span class="spinner"></span> Starting audit...';
     status.appendChild(timerEl);
+    writeTerminal('[fetch] Opening audit stream...', 'out');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 240000);
@@ -660,6 +698,7 @@ async function runAudit() {
     if (!reportHtml) throw new Error('No report received from server');
 
     lastReportHtml = reportHtml;
+    writeTerminal('[report] Report HTML received.', 'ok');
 
     // Update URL for sharing
     window.history.replaceState(null, '', '?repo=' + encodeURIComponent(cleanRepo(repo)));
@@ -673,12 +712,13 @@ async function runAudit() {
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
     refreshHistory();
-    populateTerminal(repo);
+    writeTerminal('✓ Audit complete. Report loaded below.', 'ok');
     confettiBurst();
   } catch(e) {
     clearInterval(timerInterval);
     const msg = e.name === 'AbortError' ? 'Request timed out. The LLM may be slow or unreachable.' : e.message;
     status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>';
+    writeTerminal('✖ ' + msg, 'err');
     setProgressVisible(true, false);
     progressTrack.style.display = 'none';
   } finally {
@@ -1003,7 +1043,7 @@ loadFamousRepos();
 
 // ─── V3 history widget ───
 loadHistory();
-populateTerminal(window._initialRepo || lastAuditedRepo);
+if (!window._initialRepo) populateTerminal(lastAuditedRepo);
 setInterval(loadHistory, 15000);
 
 setInterval(function() {
