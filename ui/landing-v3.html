@@ -177,6 +177,8 @@ tr:hover td{background:var(--surface)}
 .demo-wrap iframe{width:100%;height:500px;border:none;display:block}
 #result{scroll-margin-top:24px}
 #result iframe{width:100%;height:min(78vh,760px);min-height:520px;border:none;display:block;background:rgba(255,255,255,0.02)}
+.preview-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;max-width:1120px;margin:0 auto}
+.preview-grid .preview-card{flex:0 1 260px;width:min(100%,260px)}
 .preview-card{padding:24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);text-align:center;transition:border-color .2s,transform .2s}
 .preview-card:hover{border-color:rgba(124,92,252,0.3);transform:translateY(-2px)}
 .preview-score{font-size:2.8rem;font-weight:900;letter-spacing:-0.04em;line-height:1;margin-bottom:4px}
@@ -222,6 +224,7 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
   .stats-row{gap:28px}
   .stat-num{font-size:2rem}
   .pipeline{grid-template-columns:1fr}
+  .preview-grid .preview-card{flex-basis:100%;width:100%}
   .demo-wrap iframe{height:360px}
   #result{width:calc(100vw - 48px)!important;max-width:100%!important;border-radius:12px}
   #result iframe{height:72vh;min-height:420px}
@@ -432,7 +435,7 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
 <section class="section container" id="benchmarks">
   <div class="section-label">Sample Reports</div>
   <div class="section-title">Real scores from <em>real repos</em></div>
-  <div class="preview-grid" id="famous-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;">
+  <div class="preview-grid" id="famous-grid">
     <div class="preview-card" style="padding:24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);">
       <div style="font-size:2.4rem;font-weight:900;line-height:1;margin-bottom:4px;color:var(--muted);">—</div>
       <div style="font-size:.72rem;color:var(--muted);margin-bottom:6px;">Loading audits...</div>
