@@ -366,94 +366,112 @@ function selectFileCount(el, count) {
   window._selectedFileCount = count;
 }
 
-function goAudit() {
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function goAudit() {
   var val = document.getElementById('repo-input').value.trim();
-  if (!val) { window.location.href = '/audit'; return; }
+  if (!val) return;
   var match = val.match(/(?:github\.com\/)?([\w.-]+\/[\w.-]+?)(?:\/|$)/);
   var repo = match ? match[1] : val;
 
   // Show terminal with loading state
   var term = document.getElementById('terminal-body');
-  var cursor = document.getElementById('cursor-line');
   var reportArea = document.getElementById('report-area');
   reportArea.innerHTML = '';
   reportArea.style.display = 'none';
-  if (cursor) cursor.innerHTML = '';
+
   term.innerHTML = '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-    '<span class="out">┌─ Connecting to API...</span>\n' +
-    '<span class="prompt">$</span> <span class="cmd">waiting for response</span><span class="terminal-cursor"></span>';
+    '<span class="out">┌─ Connecting...</span>\n';
 
-  // POST to /api/audit with SSE streaming
-  var xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/audit', true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.setRequestHeader('Accept', 'text/event-stream');
+  try {
+    var resp = await fetch('/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: repo, maxFiles: window._selectedFileCount || 10 }),
+    });
 
-  var buffer = '';
-  xhr.onprogress = function() {
-    buffer += xhr.responseText.substring(buffer.length);
-    var lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    var eventType = '';
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      if (line.startsWith('event: ')) {
-        eventType = line.slice(7).trim();
-      } else if (line.startsWith('data: ')) {
+    if (!resp.ok) {
+      var err = await resp.text().catch(function() { return 'Unknown error'; });
+      throw new Error(err.slice(0, 200));
+    }
+
+    // ── Read SSE stream via ReadableStream ──
+    var reader = resp.body.getReader();
+    var decoder = new TextDecoder();
+    var buf = '';
+    var reportHtml = null;
+
+    function setTerm(msg) {
+      term.innerHTML = '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
+        '<span class="out">' + msg + '</span>\n';
+    }
+
+    while (true) {
+      var chunk = await reader.read();
+      if (chunk.done) break;
+
+      buf += decoder.decode(chunk.value, { stream: true });
+
+      // SSE events are separated by blank lines (\n\n)
+      var parts = buf.split('\n\n');
+      buf = parts.pop() || '';
+
+      for (var p = 0; p < parts.length; p++) {
+        var part = parts[p];
+        if (!part.trim()) continue;
+        var lines = part.split('\n');
+        var eventType = 'message';
+        var dataStr = '';
+        for (var l = 0; l < lines.length; l++) {
+          if (lines[l].startsWith('event: ')) eventType = lines[l].slice(7).trim();
+          else if (lines[l].startsWith('data: ')) dataStr += lines[l].slice(6);
+        }
+        if (!dataStr) continue;
+
         try {
-          var data = JSON.parse(line.slice(6));
-          handleSSEEvent(eventType, data, repo, term);
-        } catch(e) {}
+          var data = JSON.parse(dataStr);
+          if (eventType === 'progress') {
+            setTerm(escHtml(data.message || data.step));
+          } else if (eventType === 'complete') {
+            reportHtml = data.html;
+          } else if (eventType === 'error') {
+            throw new Error(data.message || 'Audit failed');
+          }
+        } catch(e) {
+          if (e.message !== 'Audit failed') {
+            console.warn('SSE parse:', e.message);
+          } else {
+            throw e;
+          }
+        }
       }
     }
-  };
 
-  xhr.onloadend = function() {
-    // Flush remaining buffer
-    var lines = buffer.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      if (line.startsWith('data: ')) {
-        try {
-          var data = JSON.parse(line.slice(6));
-          handleSSEEvent(data.event || 'complete', data, repo, term);
-        } catch(e) {}
-      }
-    }
-  };
+    if (!reportHtml) throw new Error('No report received from server');
 
-  xhr.send(JSON.stringify({ repo: repo, maxFiles: window._selectedFileCount || 10 }));
-}
-
-function handleSSEEvent(eventType, data, repo, term) {
-  if (eventType === 'progress') {
-    var icons = { fetch: '📦', structural: '🔭', report: '🧠' };
-    var icon = icons[data.step] || '⚡';
-    term.innerHTML =
-      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-      '<span class="out">' + icon + ' ' + (data.message || data.step) + '</span>\n' +
-      '<span class="prompt">$</span> <span class="cmd">working...</span><span class="terminal-cursor"></span>';
-  } else if (eventType === 'complete' && data.html) {
+    // ── Show completed terminal state ──
     term.innerHTML =
       '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
       '<span class="out">┌─ Structural Analysis ───────────────── <span class="highlight">done</span></span>\n' +
       '<span class="out">├─ Deep Code Review ───────────────────── <span class="highlight">done</span></span>\n' +
       '<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>\n' +
-      '<span class="out">└─ Report <span class="highlight">ready</span></span>\n' +
-      '<span class="prompt">$</span> <span class="cmd">Report loaded below</span>';
+      '<span class="out">└─ Report <span class="highlight">ready</span></span>';
 
-    // Render the report HTML in the report area
-    var reportArea = document.getElementById('report-area');
-    reportArea.innerHTML = data.html;
+    // ── Render report inside iframe (isolates CSS/JS) ──
+    reportArea.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report" style="width:100%;height:600px;border:none;display:block;"></iframe>';
     reportArea.style.display = 'block';
+
+    // Update URL for sharing
+    window.history.replaceState(null, '', '/audit?repo=' + encodeURIComponent(repo));
 
     // Refresh history
     if (typeof loadHistory === 'function') loadHistory();
-  } else if (eventType === 'error') {
+  } catch(e) {
     term.innerHTML =
       '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-      '<span class="out" style="color:var(--pink)">✖ Error: ' + (data.message || 'Unknown error') + '</span>\n' +
-      '<span class="prompt">$</span> <span class="cmd" id="cursor-line">try again with a smaller repo</span><span class="terminal-cursor"></span>';
+      '<span class="out" style="color:var(--pink)">✖ Error: ' + escHtml(e.message) + '</span>';
   }
 }
 
@@ -469,7 +487,6 @@ async function loadHistory() {
     }
     list.innerHTML = history.slice(0, 5).map(function(h) {
       var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--pink)';
-      var badge = h.critical > 0 ? ' <span style="color:var(--pink);font-size:.68rem;">' + h.critical + '</span>' : '';
       var trend = h.trend === 'up' ? '<span style="color:var(--green)">↑</span>' : h.trend === 'down' ? '<span style="color:var(--pink)">↓</span>' : '';
       return '<div class="history-item" onclick="window.location.href=\'/audit?repo=' + encodeURIComponent(h.repo) + '\'">' +
         '<span class="h-item-repo">' + (h.full_name || h.repo) + '</span>' +
@@ -477,9 +494,7 @@ async function loadHistory() {
         '<span style="font-size:.7rem;margin-left:2px">' + trend + '</span>' +
         '</div>';
     }).join('');
-  } catch(e) {
-    // Silent
-  }
+  } catch(e) {}
 }
 
 async function populateTerminal() {
@@ -498,9 +513,7 @@ async function populateTerminal() {
       '<span class="out">├─ Deep Code Review (' + (h.files_analyzed || '—') + ' files) ─ <span class="highlight">done</span></span>\n' +
       '<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>\n' +
       '<span class="out">└─ Overall Score: <span class="highlight" style="color:' + scoreColor + '">' + (h.overall || '—') + '/100</span> · ' + (h.findings || '—') + ' findings · ' + (h.critical || '0') + ' critical</span>';
-  } catch(e) {
-    // Keep static fallback
-  }
+  } catch(e) {}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
