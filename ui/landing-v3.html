@@ -176,6 +176,12 @@ tr:hover td{background:var(--surface)}
 /* ─── FOOTER ─── */
 footer{padding:30px 0;text-align:center;font-size:.78rem;color:var(--muted);border-top:1px solid var(--border)}
 footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 12px;border-radius:99px;background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.12);font-size:.72rem;color:var(--accent2);font-family:'JetBrains Mono',monospace}
+.result-toolbar{display:flex}
+.result-toolbar,.result-toolbar button{font-size:.82rem}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.progress-step.active{color:var(--accent2)!important;border-color:var(--accent)!important;background:rgba(124,92,252,0.1)!important}
+.progress-step.done{color:var(--green)!important;border-color:rgba(74,222,128,0.3)!important;background:rgba(74,222,128,0.06)!important}
 @media(max-width:640px){
   .nav-links{display:none}
   .hero{padding:60px 0 30px}
@@ -214,7 +220,7 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
   <div class="audit-card" style="max-width:640px;margin:28px auto 0;text-align:left">
     <div class="input-group">
       <input id="repo-input" type="text" placeholder="user/repo or full GitHub URL" autofocus>
-      <button class="btn btn-primary" onclick="goAudit()" style="padding:14px 24px;flex-shrink:0;">Audit →</button>
+      <button class="btn btn-primary" onclick="runAudit()" style="padding:14px 24px;flex-shrink:0;">Audit →</button>
     </div>
     <div class="audit-options">
       <label>Files to analyze:</label>
@@ -256,15 +262,52 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
     </div>
   </div>
 
-  <div class="history-card" style="margin:16px auto 0;max-width:640px">
-    <h3>🕐 Recent Audits</h3>
-    <div id="recent-audits">
-      <div class="history-empty">No audits yet — be the first</div>
+  <!-- ─── LIVE AUDIT PROGRESS ─── -->
+  <div id="progress" style="display:none;max-width:640px;margin:16px auto 0;text-align:left;">
+    <div class="progress-steps" style="display:flex;gap:4px;margin-bottom:8px;">
+      <div id="p-fetch" class="progress-step" style="flex:1;text-align:center;padding:6px 4px;border-radius:6px;font-size:.7rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);transition:all .3s;">📦 Fetch</div>
+      <div id="p-structural" class="progress-step" style="flex:1;text-align:center;padding:6px 4px;border-radius:6px;font-size:.7rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);transition:all .3s;">🔭 Structure</div>
+      <div id="p-deep" class="progress-step" style="flex:1;text-align:center;padding:6px 4px;border-radius:6px;font-size:.7rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);transition:all .3s;">🔬 Deep</div>
+      <div id="p-report" class="progress-step" style="flex:1;text-align:center;padding:6px 4px;border-radius:6px;font-size:.7rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);transition:all .3s;">🧠 Report</div>
     </div>
+    <div id="progress-track" style="display:none;height:4px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-bottom:8px;">
+      <div id="progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;transition:width .5s ease;"></div>
+    </div>
+    <div id="status" style="font-size:.82rem;color:var(--muted);min-height:1.4em;"></div>
   </div>
 
-  <!-- ─── INLINE REPORT ─── -->
-  <div id="report-area" style="display:none;max-width:960px;margin:24px auto 0;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);background:var(--surface);box-shadow:0 40px 100px -25px rgba(0,0,0,0.6)"></div>
+  <div id="result" style="display:none;max-width:960px;margin:16px auto 0;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);background:var(--surface);box-shadow:0 40px 100px -25px rgba(0,0,0,0.6)"></div>
+
+  <div id="result-toolbar" style="display:none;max-width:960px;margin:12px auto 0;gap:8px;flex-wrap:wrap;justify-content:center;display:flex;" class="result-toolbar">
+    <button class="btn btn-glass" onclick="downloadReport()" style="font-size:0.82rem;padding:8px 16px;">📄 Download HTML</button>
+    <button class="btn btn-glass" onclick="printReport()" style="font-size:0.82rem;padding:8px 16px;">🖨️ Print / Save as PDF</button>
+    <button class="btn btn-glass" onclick="copyBadgeMarkdown()" style="font-size:0.82rem;padding:8px 16px;">🏷️ Copy Badge MD</button>
+    <button class="btn btn-glass" onclick="shareOnX()" style="font-size:0.82rem;padding:8px 16px;">𝕏 Share Score</button>
+  </div>
+
+  <!-- PR Generation Section -->
+  <div id="pr-section" style="display:none;max-width:640px;margin:20px auto 0;padding-top:20px;border-top:1px solid var(--border);text-align:left;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <strong style="font-size:1.05rem;">🔄 Auto-Fix PR</strong>
+        <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">Generate a pull request to fix critical findings</span>
+      </div>
+      <button id="pr-btn" class="btn btn-glass" onclick="generatePR()" style="font-size:0.82rem;padding:8px 16px;">Generate Fix PR →</button>
+    </div>
+    <div id="pr-progress" style="display:none;margin-top:12px;">
+      <span class="spinner"></span> Generating PR plan with LLM...
+    </div>
+    <div id="pr-plan" style="display:none;margin-top:16px;padding:16px;background:var(--surface2);border-radius:12px;"></div>
+  </div>
+
+  <div style="max-width:640px;margin:16px auto 0;">
+    <div class="history-card">
+      <h3>🕐 Recent Audits</h3>
+      <div id="recent-audits">
+        <div class="history-empty">No audits yet — be the first</div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- ─── STATS ─── -->
@@ -346,6 +389,20 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
   </table>
 </section>
 
+<!-- ─── SAMPLE REPORTS ─── -->
+<section class="section container" id="benchmarks">
+  <div class="section-label">Sample Reports</div>
+  <div class="section-title">Real scores from <em>real repos</em></div>
+  <div class="preview-grid" id="famous-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;">
+    <div class="preview-card" style="padding:24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);">
+      <div style="font-size:2.4rem;font-weight:900;line-height:1;margin-bottom:4px;color:var(--muted);">—</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:6px;">Loading audits...</div>
+      <div style="font-size:.8rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">expressjs/express</div>
+      <div style="font-size:.7rem;color:var(--dim);margin-top:4px;">Results appear as each completes</div>
+    </div>
+  </div>
+</section>
+
 <!-- ─── CTA ─── -->
 <section class="cta">
   <div class="container">
@@ -362,93 +419,158 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
 <script>
 window._selectedFileCount = 10;
 
-function selectFileCount(el, count) {
+function selectFileCount(el, val) {
   document.querySelectorAll('.file-chip').forEach(function(c) { c.classList.remove('active'); });
   el.classList.add('active');
-  window._selectedFileCount = count;
+  window._selectedFileCount = val;
 }
 
-function setRepo(repo) {
-  document.getElementById('repo-input').value = repo;
-  goAudit();
+function loadCachedReport(repo) {
+  setRepo(repo);
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('result').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);"><span class="spinner"></span> Loading cached report...</div>';
+  fetch('/report?repo=' + encodeURIComponent(repo))
+    .then(function(r) {
+      if (!r.ok) throw new Error('No cached report');
+      return r.text();
+    })
+    .then(function(html) {
+      lastReportHtml = html;
+      document.getElementById('result').style.display = 'block';
+      document.getElementById('result').innerHTML = '<iframe srcdoc="' + escHtml(html) + '" title="Audit Report"></iframe>';
+      document.getElementById('result-toolbar').style.display = 'flex';
+      document.getElementById('status').innerHTML = '<span style="color:var(--green);">✓ Loaded cached report for ' + escHtml(repo) + '</span>';
+      lastAuditedRepo = repo;
+      document.getElementById('pr-section').style.display = 'block';
+    })
+    .catch(function() {
+      // No cached report — run fresh audit
+      document.getElementById('status').innerHTML = 'No cached report found. Running fresh audit...';
+      runAudit();
+    });
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+async function runAudit() {
+  const input = document.getElementById('repo-input');
+  const btn = document.getElementById('audit-btn');
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+  const toolbar = document.getElementById('result-toolbar');
+  const progress = document.getElementById('progress');
+  const progressTrack = document.getElementById('progress-track');
+  const progressFill = document.getElementById('progress-fill');
 
-async function goAudit() {
-  var val = document.getElementById('repo-input').value.trim();
-  if (!val) return;
-  var match = val.match(/(?:github\.com\/)?([\w.-]+\/[\w.-]+?)(?:\/|$)/);
-  var repo = match ? match[1] : val;
+  const repo = input.value.trim();
+  if (!repo) { status.textContent = '⚠️ Enter a GitHub repo URL'; return; }
 
-  // Show terminal with loading state
-  var term = document.getElementById('terminal-body');
-  var reportArea = document.getElementById('report-area');
-  reportArea.innerHTML = '';
-  reportArea.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = '⏳ Auditing...';
+  status.innerHTML = '';
+  result.style.display = 'none';
+  toolbar.style.display = 'none';
+  progress.style.display = 'flex';
+  progressTrack.style.display = 'block';
+  progressFill.style.width = '0%';
+  lastReportHtml = '';
 
-  term.innerHTML = '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-    '<span class="out">┌─ Connecting...</span>\n';
+  function setStep(id, state) {
+    const el = document.getElementById(id);
+    el.className = 'progress-step ' + state;
+  }
+
+  setStep('p-fetch', 'active');
+
+  // Elapsed timer
+  let elapsed = 0;
+  const timerEl = document.createElement('span');
+  timerEl.style.cssText = 'color:var(--muted);font-size:0.75rem;margin-left:8px;';
+  const timerInterval = setInterval(() => {
+    elapsed++;
+    timerEl.textContent = '(' + elapsed + 's)';
+  }, 1000);
+
+  // SSE stream reader
+  function updateStatus(step, msg) {
+    const stepMap = { fetch: 'p-fetch', structural: 'p-structural', deep: 'p-deep', aggregation: 'p-deep', report: 'p-report' };
+    const stepId = stepMap[step];
+    if (stepId) {
+      setStep('p-fetch', 'done');
+      setStep('p-structural', step === 'structural' ? 'active' : 'done');
+      setStep('p-deep', step === 'deep' || step === 'aggregation' ? 'active' : (step !== 'structural' ? 'done' : ''));
+      setStep('p-report', step === 'report' ? 'active' : '');
+    }
+    status.innerHTML = '<span class="spinner"></span> ' + escHtml(msg);
+    status.appendChild(timerEl);
+    // Update progress bar
+    var fillPct = { fetch: 25, structural: 50, deep: 75, aggregation: 85, report: 100 };
+    if (fillPct[step]) progressFill.style.width = fillPct[step] + '%';
+  }
 
   try {
-    var resp = await fetch('/api/audit', {
+    setStep('p-fetch', 'done');
+    setStep('p-structural', 'active');
+    progressFill.style.width = '25%';
+    status.innerHTML = '<span class="spinner"></span> Starting audit...';
+    status.appendChild(timerEl);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 240000);
+
+    const resp = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo: repo, maxFiles: window._selectedFileCount || 10 }),
+      body: JSON.stringify({ repo, maxFiles: window._selectedFileCount || 10 }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!resp.ok) {
-      var err = await resp.text().catch(function() { return 'Unknown error'; });
+      const err = await resp.text().catch(() => 'Unknown error');
       throw new Error(err.slice(0, 200));
     }
 
-    // ── Read SSE stream via ReadableStream ──
-    var reader = resp.body.getReader();
-    var decoder = new TextDecoder();
-    var buf = '';
-    var reportHtml = null;
-
-    function setTerm(msg) {
-      term.innerHTML = '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-        '<span class="out">' + msg + '</span>\n';
-    }
+    // Read SSE stream
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let reportHtml = null;
 
     while (true) {
-      var chunk = await reader.read();
-      if (chunk.done) break;
+      const { done, value } = await reader.read();
+      if (done) break;
 
-      buf += decoder.decode(chunk.value, { stream: true });
+      buffer += decoder.decode(value, { stream: true });
 
-      // SSE events are separated by blank lines (\n\n)
-      var parts = buf.split('\n\n');
-      buf = parts.pop() || '';
+      // Parse complete SSE events
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
 
-      for (var p = 0; p < parts.length; p++) {
-        var part = parts[p];
+      for (const part of parts) {
         if (!part.trim()) continue;
-        var lines = part.split('\n');
-        var eventType = 'message';
-        var dataStr = '';
-        for (var l = 0; l < lines.length; l++) {
-          if (lines[l].startsWith('event: ')) eventType = lines[l].slice(7).trim();
-          else if (lines[l].startsWith('data: ')) dataStr += lines[l].slice(6);
+        const lines = part.split('\n');
+        let eventType = 'message';
+        let dataStr = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          else if (line.startsWith('data: ')) dataStr += line.slice(6);
         }
         if (!dataStr) continue;
 
         try {
-          var data = JSON.parse(dataStr);
-          if (eventType === 'progress') {
-            setTerm(escHtml(data.message || data.step));
-          } else if (eventType === 'complete') {
-            reportHtml = data.html;
-          } else if (eventType === 'error') {
-            throw new Error(data.message || 'Audit failed');
+          const data = JSON.parse(dataStr);
+          switch (eventType) {
+            case 'progress':
+              updateStatus(data.step, data.message);
+              break;
+            case 'complete':
+              reportHtml = data.html;
+              break;
+            case 'error':
+              throw new Error(data.message || 'Audit failed');
           }
         } catch(e) {
           if (e.message !== 'Audit failed') {
-            console.warn('SSE parse:', e.message);
+            console.warn('SSE parse error:', e.message);
           } else {
             throw e;
           }
@@ -458,29 +580,374 @@ async function goAudit() {
 
     if (!reportHtml) throw new Error('No report received from server');
 
-    // ── Show completed terminal state ──
-    term.innerHTML =
-      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-      '<span class="out">┌─ Structural Analysis ───────────────── <span class="highlight">done</span></span>\n' +
-      '<span class="out">├─ Deep Code Review ───────────────────── <span class="highlight">done</span></span>\n' +
-      '<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>\n' +
-      '<span class="out">└─ Report <span class="highlight">ready</span></span>';
-
-    // ── Render report inside iframe (isolates CSS/JS) ──
-    reportArea.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report" style="width:100%;height:600px;border:none;display:block;"></iframe>';
-    reportArea.style.display = 'block';
+    lastReportHtml = reportHtml;
 
     // Update URL for sharing
-    window.history.replaceState(null, '', '/audit?repo=' + encodeURIComponent(repo));
+    var cleanRepo = repo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+    window.history.replaceState(null, '', '?repo=' + encodeURIComponent(cleanRepo));
 
-    // Refresh history
-    if (typeof loadHistory === 'function') loadHistory();
+    setStep('p-report', 'done');
+    progressFill.style.width = '100%';
+    result.style.display = 'block';
+    result.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report"></iframe>';
+    toolbar.style.display = 'flex';
+    clearInterval(timerInterval);
+    status.innerHTML = '<span style="color:var(--green);">✓ Audit complete. Report loaded above.</span>';
+    lastAuditedRepo = repo;
+    document.getElementById('pr-section').style.display = 'block';
+    refreshHistory();
+    confettiBurst();
   } catch(e) {
-    term.innerHTML =
-      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + repo + '</span>\n' +
-      '<span class="out" style="color:var(--pink)">✖ Error: ' + escHtml(e.message) + '</span>';
+    clearInterval(timerInterval);
+    const msg = e.name === 'AbortError' ? 'Request timed out. The LLM may be slow or unreachable.' : e.message;
+    status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>';
+    progress.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Audit →';
   }
 }
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ─── Download report as standalone HTML ────────────────────────────────────
+function downloadReport() {
+  if (!lastReportHtml) return;
+  var blob = new Blob([lastReportHtml], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = (lastAuditedRepo || 'audit').replace(/[^a-z0-9-_]/gi, '-') + '-report.html';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Print / Save as PDF ─────────────────────────────────────────────────
+function printReport() {
+  if (!lastReportHtml) return;
+  var w = window.open('', '', 'width=900,height=700');
+  w.document.write(lastReportHtml);
+  w.document.close();
+  w.focus();
+  setTimeout(function() { w.print(); }, 500);
+}
+
+// ─── Copy Badge Markdown ──────────────────────────────────────────────────
+function copyBadgeMarkdown() {
+  if (!lastAuditedRepo) return;
+  var badgeUrl = window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(lastAuditedRepo);
+  var md = '[![Archiview](' + badgeUrl + ')](' + window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(lastAuditedRepo) + ')';
+  navigator.clipboard.writeText(md).then(function() {
+    var el = document.getElementById('status');
+    el.innerHTML = '<span style="color:var(--green);">Badge markdown copied! Paste in your README.</span>';
+    setTimeout(function() {
+      if (el.innerHTML.indexOf('Badge markdown') !== -1) el.innerHTML = '';
+    }, 3000);
+  }).catch(function() {
+    prompt('Copy this badge markdown:', md);
+  });
+}
+
+// ─── Confetti burst ───────────────────────────────────────────────────────
+function confettiBurst() {
+  var canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999999;';
+  document.body.appendChild(canvas);
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width = window.innerWidth;
+  var H = canvas.height = window.innerHeight;
+  var particles = [];
+  var colors = ['#7c5cfc','#5ce1e6','#f472b6','#4ade80','#fbbf24','#f87171','#22d3ee'];
+  for (var i = 0; i < 120; i++) {
+    particles.push({
+      x: W * 0.5 + (Math.random() - 0.5) * W * 0.6,
+      y: H * 0.3 + (Math.random() - 0.5) * H * 0.2,
+      vx: (Math.random() - 0.5) * 8,
+      vy: -Math.random() * 10 - 3,
+      w: Math.random() * 8 + 4,
+      h: Math.random() * 4 + 2,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      rotV: (Math.random() - 0.5) * 10,
+      life: 1,
+    });
+  }
+  var frames = 0;
+  function animate() {
+    if (frames++ > 120) { document.body.removeChild(canvas); return; }
+    ctx.clearRect(0, 0, W, H);
+    for (var p of particles) {
+      p.x += p.vx;
+      p.vy += 0.15;
+      p.y += p.vy;
+      p.rot += p.rotV;
+      p.life -= 0.008;
+      if (p.life <= 0) continue;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI / 180);
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+// ─── Share on X ────────────────────────────────────────────────────────────
+function shareOnX() {
+  if (!lastAuditedRepo) return;
+  var repo = lastAuditedRepo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  var badgeUrl = encodeURIComponent(window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(repo));
+  var appUrl = encodeURIComponent(window.location.origin + '/?repo=' + encodeURIComponent(repo));
+  var text = encodeURIComponent('My codebase scored 65/100 on Archiview\'s autonomous audit! How does yours stack up? 🏷️');
+  window.open('https://twitter.com/intent/tweet?text=' + text + '&url=' + appUrl, '_blank', 'width=600,height=400');
+}
+
+// ─── Share link ───────────────────────────────────────────────────────────
+function copyShareLink() {
+  var repo = document.getElementById('repo-input').value.trim();
+  if (!repo) {
+    navigator.clipboard.writeText(window.location.href.split('?')[0]).catch(function() {
+      prompt('Copy this link:', window.location.href.split('?')[0]);
+    });
+    return;
+  }
+  var clean = repo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  var url = window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(clean || '');
+  navigator.clipboard.writeText(url).then(function() {
+    var el = document.getElementById('status');
+    el.innerHTML = '<span style="color:var(--green);">Share link copied!</span>';
+    setTimeout(function() {
+      if (el.innerHTML.indexOf('Share link') !== -1) el.innerHTML = '';
+    }, 2000);
+  }).catch(function() {
+    prompt('Copy this link:', url);
+  });
+}
+
+// ─── Scan history ─────────────────────────────────────────────────────────
+async function refreshHistory() {
+  try {
+    var resp = await fetch('/api/audit/history');
+    if (!resp.ok) return;
+    var history = await resp.json();
+    var list = document.getElementById('history-list');
+    if (!history || history.length === 0) {
+      list.innerHTML = '<div class="history-empty">No audits yet</div>';
+      return;
+    }
+    list.innerHTML = history.map(function(h) {
+      var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--red)';
+      var badge = h.critical > 0 ? ' <span style="color:var(--red);font-size:0.7rem;">' + h.critical + '</span>' : '';
+      var trendIcon = h.trend === 'up' ? '↑' : h.trend === 'down' ? '↓' : h.trend === 'same' ? '→' : '';
+      var trendColor = h.trend === 'up' ? 'var(--green)' : h.trend === 'down' ? 'var(--red)' : 'var(--muted)';
+      return '<div class="history-item" onclick="loadCachedReport(\'' + escHtml(h.repo) + '\')">' +
+        '<div style="flex:1;min-width:0;"><div class="h-repo">' + escHtml(h.full_name || h.repo) + '</div>' +
+        '<div class="h-meta">' + (h.language || '') + badge + '</div></div>' +
+        '<div class="h-score-group">' +
+        '<div class="h-score" style="color:' + scoreColor + '">' + h.overall + '</div>' +
+        '<div class="h-trend" style="color:' + trendColor + '">' + (trendIcon || '') + '</div>' +
+        '</div>' +
+        '<div style="font-size:0.65rem;color:var(--muted);opacity:0.4;cursor:pointer;padding:2px 4px;" onclick="event.stopPropagation();setRepo(\'' + escHtml(h.repo) + '\');runAudit();" title="Re-audit">↻</div>' +
+        '</div>';
+    }).join('');
+  } catch(e) {
+    // History widget fails silently
+  }
+}
+
+refreshHistory();
+setInterval(refreshHistory, 10000);
+
+async function generatePR() {
+  const btn = document.getElementById('pr-btn');
+  const progress = document.getElementById('pr-progress');
+  const planDiv = document.getElementById('pr-plan');
+
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  progress.style.display = 'flex';
+  planDiv.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/audit/pr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: lastAuditedRepo }),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.error || 'Failed to generate PR');
+    }
+
+    if (data.error) {
+      planDiv.innerHTML = '<span style="color:var(--red);">' + escHtml(data.error) + '</span>';
+      planDiv.style.display = 'block';
+      return;
+    }
+
+    if (!data.pr) {
+      planDiv.innerHTML = '<span style="color:var(--amber);">' + escHtml(data.message || 'No issues found for PR') + '</span>';
+      planDiv.style.display = 'block';
+      return;
+    }
+
+    const pr = data.pr;
+    let filesHtml = '';
+    if (pr.files && pr.files.length > 0) {
+      filesHtml = '<div style="margin-top:12px;"><strong style="font-size:0.85rem;color:var(--muted);">FILES CHANGED</strong>';
+      for (const f of pr.files) {
+        const typeLabel = f.change_type ? f.change_type.toUpperCase() : 'MODIFY';
+        const typeBg = f.change_type === 'create' ? 'background:rgba(74,222,128,0.15);color:var(--green)' :
+          f.change_type === 'delete' ? 'background:rgba(248,113,113,0.15);color:var(--red)' :
+          'background:rgba(251,191,36,0.15);color:var(--amber)';
+        filesHtml += '<div style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:0.9rem;">';
+        filesHtml += '<span style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;' + typeBg + '">' + typeLabel + '</span>';
+        filesHtml += '<div><code style="color:var(--cyan);">' + escHtml(f.path) + '</code>';
+        if (f.description) filesHtml += '<div style="font-size:0.8rem;color:var(--muted);margin-top:2px;">' + escHtml(f.description) + '</div>';
+        filesHtml += '</div></div>';
+      }
+      filesHtml += '</div>';
+    }
+
+    planDiv.innerHTML =
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:2px;">PR TITLE</div>' +
+          '<div style="font-weight:600;font-size:1rem;">' + escHtml(pr.pr_title) + '</div>' +
+          '<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">' + escHtml((pr.pr_body || '').slice(0, 200)) + ((pr.pr_body || '').length > 200 ? '...' : '') + '</div>' +
+          '<div style="color:var(--muted);font-size:0.8rem;margin-top:6px;">Branch: <code style="color:var(--cyan);">' + escHtml(pr.branch_name || 'auto') + '</code></div>' +
+        '</div>' +
+        '<button class="btn btn-primary" onclick="publishPR()" style="flex-shrink:0;white-space:nowrap;">Publish PR to GitHub</button>' +
+      '</div>' +
+      filesHtml +
+      '<div id="pr-publish-status" style="margin-top:12px;"></div>';
+    planDiv.style.display = 'block';
+  } catch(e) {
+    planDiv.innerHTML = '<span style="color:var(--red);">' + escHtml(e.message) + '</span>';
+    planDiv.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Fix PR';
+    progress.style.display = 'none';
+  }
+}
+
+async function publishPR() {
+  const statusDiv = document.getElementById('pr-publish-status');
+  if (!statusDiv) return;
+
+  statusDiv.innerHTML = '<span class="spinner"></span> Publishing to GitHub...';
+
+  try {
+    const resp = await fetch('/api/audit/pr/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: lastAuditedRepo }),
+    });
+
+    const data = await resp.json();
+
+    if (data.error) {
+      statusDiv.innerHTML = '<span style="color:var(--amber);">' + escHtml(data.error) + '</span>';
+      if (data.prPlan) {
+        statusDiv.innerHTML += '<div style="margin-top:8px;padding:10px;background:var(--surface);border-radius:8px;font-size:0.85rem;">Set <code>GITHUB_TOKEN</code> in <code>.env</code> to enable publishing.</div>';
+      }
+      return;
+    }
+
+    if (data.url) {
+      statusDiv.innerHTML = '<span style="color:var(--green);">' + escHtml(data.message) + '</span>' +
+        '<div style="margin-top:8px;">' +
+          '<a href="' + escHtml(data.url) + '" target="_blank" class="btn btn-glass" style="font-size:0.85rem;display:inline-flex;align-items:center;gap:4px;">View PR #' + data.number + '</a>' +
+        '</div>';
+    } else {
+      statusDiv.innerHTML = '<span style="color:var(--amber);">' + escHtml(data.message || 'PR created but no URL') + '</span>';
+    }
+  } catch(e) {
+    statusDiv.innerHTML = '<span style="color:var(--red);">' + escHtml(e.message) + '</span>';
+  }
+}
+
+document.getElementById('repo-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runAudit();
+});
+
+// ─── Load famous repo results ─────────────────────────────────────────────
+function loadFamousRepos() {
+  fetch('/api/audit/famous').then(function(r) { return r.json(); }).then(function(data) {
+    if (!data || data.length === 0) return;
+    var grid = document.getElementById('famous-grid');
+    grid.innerHTML = data.map(function(r) {
+      if (r.error) return '';
+      var overall = r.scores ? r.scores.overall : 0;
+      var arch = r.scores ? (r.scores.architecture || '?') : '?';
+      var cq = r.scores ? (r.scores.code_quality || '?') : '?';
+      var sec = r.scores ? (r.scores.security || '?') : '?';
+      var scoreColor = overall >= 80 ? 'var(--green)' : overall >= 60 ? 'var(--amber)' : 'var(--red)';
+      var findingsBadge = r.findings_count ? r.findings_count + ' findings' : '';
+      return '<div class="preview-card" onclick="setRepo(\'' + escHtml(r.repo) + '\');runAudit();" style="cursor:pointer;">' +
+        '<div class="preview-score" style="color:' + scoreColor + '">' + overall + '</div>' +
+        '<div class="preview-label">Overall Score · Click to re-audit</div>' +
+        '<div class="preview-repo">' + escHtml(r.full_name || r.repo) + '</div>' +
+        '<div class="preview-detail">⚙' + arch + ' · ✓' + cq + ' · 🔒' + sec +
+        (findingsBadge ? ' · ' + findingsBadge : '') +
+        ' · ⭐' + (r.stars || '?') + '</div>' +
+        '</div>';
+    }).join('');
+    if (grid.innerHTML.trim() === '') {
+      grid.innerHTML = '<div class="preview-card"><div class="preview-score" style="color:var(--muted);font-size:1rem;">⏳</div><div class="preview-label">Audits in progress</div><div class="preview-repo">Background analysis running...</div><div class="preview-detail">Results appear as each repo completes</div></div>';
+    }
+  }).catch(function() { /* silent */ });
+}
+
+loadFamousRepos();
+
+// ─── Auto-load from URL param ──────────────────────────────────────────
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var repo = params.get('repo');
+  if (repo) {
+    document.getElementById('repo-input').value = repo;
+    // Try to load cached report
+    fetch('/report?repo=' + encodeURIComponent(repo))
+      .then(function(r) {
+        if (!r.ok) throw new Error('No cached report');
+        return r.text();
+      })
+      .then(function(html) {
+        lastReportHtml = html;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('result').innerHTML = '<iframe srcdoc="' + escHtml(html) + '" title="Audit Report"></iframe>';
+        document.getElementById('result-toolbar').style.display = 'flex';
+        document.getElementById('status').innerHTML = '<span style="color:var(--green);">✓ Cached report loaded for ' + escHtml(repo) + '</span>';
+        lastAuditedRepo = repo;
+        document.getElementById('pr-section').style.display = 'block';
+        refreshHistory();
+      })
+      .catch(function() {
+        // No cached report — user will click Audit
+        document.getElementById('status').innerHTML = 'Repo <strong>' + escHtml(repo) + '</strong> loaded. Click <strong>Audit →</strong> to analyze.';
+      });
+  }
+})();
+
+
+// ─── V3 history widget ───
+loadHistory();
+populateTerminal();
+setInterval(loadHistory, 15000);
+
+setInterval(function() {
+  loadFamousRepos();
+}, 30000); // Refresh famous repos every 30s
 
 async function loadHistory() {
   try {
@@ -523,23 +990,7 @@ async function populateTerminal() {
   } catch(e) {}
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('repo-input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') goAudit();
-  });
 
-  // Auto-run from URL param
-  var params = new URLSearchParams(window.location.search);
-  var repoParam = params.get('repo');
-  if (repoParam) {
-    document.getElementById('repo-input').value = repoParam;
-    setTimeout(goAudit, 300);
-  }
-
-  loadHistory();
-  populateTerminal();
-  setInterval(loadHistory, 15000);
-});
 </script>
 </body>
 </html>
