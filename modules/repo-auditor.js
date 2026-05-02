@@ -310,6 +310,22 @@ function chunkFiles(files, maxChunkSize = 6000) {
   return chunks;
 }
 
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
 async function analyzeRepo(repoData, onProgress) {
   const startTime = Date.now();
   // Prefer Kimi K2.6 via OpenRouter
@@ -369,23 +385,24 @@ async function analyzeRepo(repoData, onProgress) {
     return true;
   });
   const chunks = chunkFiles(codeFiles);
-  const deepResults = [];
+  const deepConcurrency = Math.max(1, parseInt(process.env.AUDIT_DEEP_CONCURRENCY || '2', 10) || 2);
 
-  for (let i = 0; i < chunks.length; i++) {
-    console.log(`Auditor:   Deep chunk ${i + 1}/${chunks.length} (${chunks[i].length} files)...`);
+  onProgress && onProgress('deep', `AI reviewing ${chunks.length} file chunks with ${Math.min(deepConcurrency, chunks.length) || 1} workers...`);
+  const deepResults = (await mapLimit(chunks, deepConcurrency, async (chunk, i) => {
+    console.log(`Auditor:   Deep chunk ${i + 1}/${chunks.length} (${chunk.length} files)...`);
     onProgress && onProgress('deep', `AI reviewing files (chunk ${i+1}/${chunks.length})...`);
-    const chunkContent = chunks[i].join('\n\n');
+    const chunkContent = chunk.join('\n\n');
     try {
       const raw = await callLLM([
         { role: 'system', content: DEEP_ANALYSIS_SYSTEM },
         { role: 'user', content: `Analyze these files:\n\n${chunkContent.slice(0, 6000)}` },
       ], model === 'kimi26' ? 'minimax27' : (model === 'kimi' ? 'fast' : model));
-      const parsed = JSON.parse(extractJSON(raw));
-      deepResults.push(parsed);
+      return JSON.parse(extractJSON(raw));
     } catch(e) {
       console.warn(`Auditor:   Chunk ${i + 1} failed:`, e.message);
+      return null;
     }
-  }
+  })).filter(Boolean);
 
   // ─── Aggregation ──────────────────────────────────────────────────────
   console.log('Auditor: Pass 3 — Aggregation...');
@@ -457,19 +474,19 @@ async function analyzeRepo(repoData, onProgress) {
     }
 
     // Step 1: Kimi summarizes each batch (40-50 findings)
-    const batchResults = [];
+    const batchConcurrency = Math.max(1, parseInt(process.env.AUDIT_AGG_CONCURRENCY || '2', 10) || 2);
     onProgress && onProgress('aggregation', `Kimi is summarizing ${batches.length} finding batches...`);
-    for (let i = 0; i < batches.length; i++) {
-      console.log(`Auditor:   Aggregation batch ${i + 1}/${batches.length} (${batches[i].length} findings)...`);
+    const batchResults = await mapLimit(batches, batchConcurrency, async (batch, i) => {
+      console.log(`Auditor:   Aggregation batch ${i + 1}/${batches.length} (${batch.length} findings)...`);
       const batchInput = {
         repo: repoData.metadata.full_name,
         batch: i + 1,
         total_batches: batches.length,
-        findings: batches[i],
+        findings: batch,
         stats: {
-          critical: batches[i].filter(f => f.severity === 'CRITICAL').length,
-          warning: batches[i].filter(f => f.severity === 'WARNING').length,
-          info: batches[i].filter(f => f.severity === 'INFO').length,
+          critical: batch.filter(f => f.severity === 'CRITICAL').length,
+          warning: batch.filter(f => f.severity === 'WARNING').length,
+          info: batch.filter(f => f.severity === 'INFO').length,
         },
       };
       try {
@@ -478,17 +495,17 @@ async function analyzeRepo(repoData, onProgress) {
           { role: 'user', content: JSON.stringify(batchInput, null, 2) },
         ], model, 0.4, 8192);
         const parsed = JSON.parse(extractJSON(raw));
-        batchResults.push(parsed);
         console.log(`Auditor:   Batch ${i + 1} done — ${parsed.top_findings?.length || 0} top findings`);
+        return parsed;
       } catch(e) {
         console.warn(`Auditor:   Batch ${i + 1} aggregation failed:`, e.message);
-        batchResults.push({
+        return {
           batch_summary: `Batch ${i + 1} of ${batches.length}: ${batches[i].length} findings analyzed`,
-          top_findings: batches[i].slice(0, 5),
+          top_findings: batch.slice(0, 5),
           signals: { key_issues: ['Failed to process batch'], strengths: [] },
-        });
+        };
       }
-    }
+    });
 
     // Step 2: Kimi aggregates batch summaries into final report
     onProgress && onProgress('aggregation', 'Kimi is finalizing the report...');

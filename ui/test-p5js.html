@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>p5.js Scene</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script>try{window.addEventListener("deviceorientation",function(){},true);window.addEventListener("devicemotion",function(){},true)}catch(e){}</script>
+<style>
+html,body{margin:0;padding:0;overflow:hidden;background:#000}canvas{display:block}
+#hud{position:fixed;bottom:0;left:0;right:0;padding:8px 16px;font-family:'Courier New',monospace;font-size:11px;color:rgba(255,255,255,0.5);background:linear-gradient(transparent,rgba(0,0,0,0.7));display:flex;justify-content:space-between;z-index:10;pointer-events:none;transition:opacity 0.3s}
+#hud.hide{opacity:0}
+#controls{position:fixed;top:10px;right:10px;z-index:20;display:flex;gap:6px;transition:opacity 0.3s}
+#controls.hide{opacity:0;pointer-events:none}
+#controls button{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.7);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-family:'Courier New',monospace}
+#controls button:hover{background:rgba(255,255,255,0.2)}
+#controls button.active{background:rgba(255,100,255,0.3);border-color:rgba(255,100,255,0.5)}
+#beat-flash{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:5;opacity:0;transition:opacity 0.05s}
+</style>
+</head>
+<body data-spec="{&quot;scene&quot;:{&quot;name&quot;:&quot;neon-rain&quot;,&quot;tempo&quot;:85,&quot;duration_seconds&quot;:30,&quot;mood&quot;:&quot;melancholic&quot;,&quot;genre&quot;:&quot;electronic&quot;},&quot;visual&quot;:{&quot;style&quot;:&quot;particles&quot;,&quot;color_palette&quot;:[&quot;#ff00ff&quot;,&quot;#00ffff&quot;,&quot;#2d1b69&quot;],&quot;intensity&quot;:0.7,&quot;effects&quot;:[&quot;bloom&quot;,&quot;scanlines&quot;]},&quot;audio&quot;:{&quot;bpm&quot;:85}}">
+<div id="controls">
+  <button id="btn-audio" onclick="toggleAudio()">🔊 Audio</button>
+  <button id="btn-fs" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+  <button id="btn-record" onclick="toggleRecord()">⏺ Record</button>
+  <button id="btn-style" onclick="cycleStyle()">🎨 Style</button>
+</div>
+<div id="hud">
+  <div><span id="hud-name">—</span> · <span id="hud-style">—</span></div>
+  <div><span id="hud-time">0:00</span> · <span id="hud-beat">0</span>b · <span id="hud-tempo">120</span>BPM</div>
+</div>
+<div id="beat-flash"></div>
+<script>
+// ═══ SCENE CONFIG ═══
+var specData = JSON.parse(document.body.getAttribute('data-spec') || '{}');
+var S = specData.scene || { name: 'untitled', tempo: 120, duration: 45 };
+var V = specData.visual || {};
+var rawPal = V.color_palette || V.palette;
+V.palette = (rawPal && rawPal.length) ? rawPal : ['#ff6b6b','#feca57','#00d4ff','#2d1b69'];
+V.effects = (V.effects && V.effects.length) ? V.effects : ['bloom','vignette'];
+V.style = V.style || 'geometric';
+V.intensity = V.intensity || 0.7;
+var T = specData.timing || { beatMs: 500, sections: [], keyMoments: [] };
+
+// ═══ Convert hex palette to RGB ═══
+var P = V.palette.map(function(h) {
+  return [
+    parseInt(h.slice(1,3),16),
+    parseInt(h.slice(3,5),16),
+    parseInt(h.slice(5,7),16)
+  ];
+});
+
+// ═══ AUDIO STATE ═══
+var audioCtx = null, analyser = null, audioGain = null;
+var freqData = new Uint8Array(128);
+var timeData = new Uint8Array(128);
+var audioOn = false;
+var audioStartTime = 0;
+var oscs = [], gains = [];
+
+// ═══ RECORD STATE ═══
+var recorder = null, recordedChunks = [], isRecording = false;
+
+// ═══ STATE ═══
+var startTime = 0;
+var particles = [];
+var organicNodes = [], organicConns = [];
+var prevBeat = -1;
+var audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
+var beatPulse = 0;
+var currentStyleIdx = 0;
+var allStyles = ['ascii','geometric','particles','waveform','glitch','minimal','retro','organic'];
+
+// ═══ AUDIO ENGINE ═══
+function startAudioEngine() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+  timeData = new Uint8Array(analyser.frequencyBinCount);
+  
+  audioGain = audioCtx.createGain();
+  audioGain.gain.value = 0.15;
+  audioGain.connect(analyser);
+  analyser.connect(audioCtx.destination);
+  
+  var bpm = S.tempo || 120;
+  var baseFreq = bpm / 60 * 55;
+  
+  // Bass oscillator
+  var o1 = audioCtx.createOscillator(); var g1 = audioCtx.createGain();
+  o1.type = 'sine'; o1.frequency.value = baseFreq * 0.5; g1.gain.value = 0.3;
+  o1.connect(g1); g1.connect(audioGain); o1.start();
+  
+  // Mid oscillator
+  var o2 = audioCtx.createOscillator(); var g2 = audioCtx.createGain();
+  o2.type = 'triangle'; o2.frequency.value = baseFreq; g2.gain.value = 0.15;
+  o2.connect(g2); g2.connect(audioGain); o2.start();
+  
+  // High oscillator
+  var o3 = audioCtx.createOscillator(); var g3 = audioCtx.createGain();
+  o3.type = 'square'; o3.frequency.value = baseFreq * 2; g3.gain.value = 0.05;
+  o3.connect(g3); g3.connect(audioGain); o3.start();
+  
+  // Sub bass
+  var o4 = audioCtx.createOscillator(); var g4 = audioCtx.createGain();
+  o4.type = 'sine'; o4.frequency.value = baseFreq * 0.25; g4.gain.value = 0.2;
+  o4.connect(g4); g4.connect(audioGain); o4.start();
+  
+  oscs = [o1, o2, o3, o4];
+  gains = [g1, g2, g3, g4];
+  audioStartTime = audioCtx.currentTime;
+  audioOn = true;
+  document.getElementById('btn-audio').classList.add('active');
+  document.getElementById('btn-audio').textContent = '🔊 Playing';
+}
+
+function stopAudioEngine() {
+  if (!audioCtx) return;
+  for (var i = 0; i < oscs.length; i++) { try { oscs[i].stop(); } catch(e){} }
+  audioCtx.close();
+  audioCtx = null; analyser = null;
+  audioOn = false;
+  document.getElementById('btn-audio').classList.remove('active');
+  document.getElementById('btn-audio').textContent = '🔇 Muted';
+}
+
+function toggleAudio() {
+  if (audioOn) stopAudioEngine(); else startAudioEngine();
+}
+
+function updateAudio() {
+  if (!analyser) return;
+  analyser.getByteFrequencyData(freqData);
+  analyser.getByteTimeDomainData(timeData);
+  
+  // Split into bands
+  var bass = 0, mid = 0, hi = 0;
+  for (var i = 0; i < 10; i++) bass += freqData[i];
+  for (var i = 10; i < 40; i++) mid += freqData[i];
+  for (var i = 40; i < freqData.length; i++) hi += freqData[i];
+  bassLevel = bass / (10 * 255);
+  midLevel = mid / (30 * 255);
+  highLevel = hi / ((freqData.length - 40) * 255);
+  audioLevel = (bassLevel + midLevel + highLevel) / 3;
+  
+  // Modulate oscillators based on section
+  var dur = S.duration_seconds || S.duration || 45;
+  var t = audioOn ? (audioCtx.currentTime - audioStartTime) : ((millis() - startTime) / 1000);
+  var beatMs = T.beatMs || T.beat_interval_ms || 500;
+  var beat = Math.floor(t * 1000 / beatMs);
+  var bp = (beat % 4) / 4;
+  
+  // Section-based dynamics
+  var sectionMul = 0.5;
+  var sections = T.sections || T.sec || [];
+  for (var i = 0; i < sections.length; i++) {
+    if (beat >= sections[i].start_beat && beat < sections[i].end_beat) {
+      var name = (sections[i].name || '').toLowerCase();
+      if (name.indexOf('intro') >= 0) sectionMul = 0.3;
+      else if (name.indexOf('build') >= 0) sectionMul = 0.6;
+      else if (name.indexOf('drop') >= 0 || name.indexOf('climax') >= 0) sectionMul = 1.0;
+      else if (name.indexOf('outro') >= 0) sectionMul = 0.2;
+      else sectionMul = 0.5;
+      break;
+    }
+  }
+  
+  if (gains.length >= 4 && audioCtx) {
+    var vol = V.intensity * sectionMul;
+    gains[0].gain.setTargetAtTime(0.3 * vol * (0.8 + bp * 0.2), audioCtx.currentTime, 0.05);
+    gains[1].gain.setTargetAtTime(0.15 * vol * (0.5 + Math.sin(t * 3) * 0.3), audioCtx.currentTime, 0.05);
+    gains[2].gain.setTargetAtTime(0.05 * vol * (0.3 + bp * 0.5), audioCtx.currentTime, 0.05);
+    gains[3].gain.setTargetAtTime(0.2 * vol * (0.6 + Math.sin(t * 0.5) * 0.3), audioCtx.currentTime, 0.05);
+  }
+  
+  return audioLevel;
+}
+
+// ═══ FULLSCREEN ═══
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(function(){});
+    document.getElementById('controls').classList.add('hide');
+    document.getElementById('hud').classList.add('hide');
+  } else {
+    document.exitFullscreen();
+    document.getElementById('controls').classList.remove('hide');
+    document.getElementById('hud').classList.remove('hide');
+  }
+}
+
+document.addEventListener('fullscreenchange', function() {
+  if (!document.fullscreenElement) {
+    document.getElementById('controls').classList.remove('hide');
+    document.getElementById('hud').classList.remove('hide');
+  }
+});
+
+// ═══ VIDEO RECORDING ═══
+function toggleRecord() {
+  if (isRecording) {
+    recorder.stop();
+    isRecording = false;
+    document.getElementById('btn-record').classList.remove('active');
+    document.getElementById('btn-record').textContent = '⏺ Record';
+    return;
+  }
+  
+  try {
+    var canvasEl = document.querySelector('canvas');
+    var stream = canvasEl.captureStream(30);
+    
+    // Add audio track if audio is playing
+    if (audioCtx && audioCtx.createMediaStreamDestination) {
+      var dest = audioCtx.createMediaStreamDestination();
+      audioGain.connect(dest);
+      stream.addTrack(dest.stream.getAudioTracks()[0]);
+    }
+    
+    recordedChunks = [];
+    recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+    recorder.ondataavailable = function(e) { if (e.data.size > 0) recordedChunks.push(e.data); };
+    recorder.onstop = function() {
+      var blob = new Blob(recordedChunks, { type: 'video/webm' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = (S.name || 'scene') + '.webm';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    recorder.start();
+    isRecording = true;
+    document.getElementById('btn-record').classList.add('active');
+    document.getElementById('btn-record').textContent = '⏹ Stop';
+  } catch(e) {
+    console.error('Record failed:', e.message);
+  }
+}
+
+// ═══ STYLE CYCLING ═══
+function cycleStyle() {
+  currentStyleIdx = (currentStyleIdx + 1) % allStyles.length;
+  V.style = allStyles[currentStyleIdx];
+  if (V.style === 'particles') initParticles();
+  if (V.style === 'organic') initOrganic();
+  document.getElementById('hud-style').textContent = V.style;
+}
+
+// ═══ SETUP ═══
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  noStroke();
+  startTime = millis();
+  if (V.style === 'particles') initParticles();
+  if (V.style === 'organic') initOrganic();
+  
+  // Update HUD
+  document.getElementById('hud-name').textContent = S.name || 'untitled';
+  document.getElementById('hud-style').textContent = V.style;
+  document.getElementById('hud-tempo').textContent = (S.tempo || 120);
+  
+  // Auto-start audio on first click
+  document.addEventListener('click', function once() {
+    if (!audioOn) startAudioEngine();
+    document.removeEventListener('click', once);
+  }, { once: true });
+}
+
+// ═══ DRAW ═══
+function draw() {
+  try {
+  background(0, 0, 10);
+  var dur = S.duration_seconds || S.duration || 45;
+  var t = ((millis() - startTime) / 1000) % dur;
+  var beatMs = T.beatMs || T.beat_interval_ms || 500;
+  var beat = Math.floor(t * 1000 / beatMs);
+  
+  // Audio analysis
+  var al = updateAudio() || 0;
+  
+  // Beat pulse
+  if (beat !== prevBeat) {
+    prevBeat = beat;
+    beatPulse = 1.0;
+    var flash = document.getElementById('beat-flash');
+    if (flash) {
+      var c = P[beat % P.length];
+      flash.style.boxShadow = 'inset 0 0 ' + (60 + al * 100) + 'px rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (0.15 * V.intensity) + ')';
+      flash.style.opacity = '1';
+      setTimeout(function(){ flash.style.opacity = '0'; }, 80);
+    }
+  }
+  beatPulse *= 0.9;
+  
+  // Scale factor from audio
+  var audioScale = 1 + bassLevel * 0.3 * V.intensity;
+  var audioBright = 1 + midLevel * 0.5;
+  
+  // Draw style
+  switch (V.style) {
+    case 'ascii':      drawAscii(t, beat, al); break;
+    case 'geometric':  drawGeo(t, beat, al, audioScale); break;
+    case 'particles':  drawParts(t, beat, al); break;
+    case 'waveform':   drawWave(t, beat, al, audioScale); break;
+    case 'glitch':     drawGlitch(t, beat, al); break;
+    case 'minimal':    drawMin(t, beat, al, audioScale); break;
+    case 'retro':      drawRetro(t, beat, al, audioScale); break;
+    case 'organic':    drawOrg(t, beat, al); break;
+    default:           drawGeo(t, beat, al, audioScale);
+  }
+  
+  // Post-processing: bloom
+  if (V.effects.indexOf('bloom') >= 0) {
+    drawingContext.save();
+    drawingContext.globalCompositeOperation = 'lighter';
+    drawingContext.globalAlpha = 0.08 + al * 0.05;
+    drawingContext.drawImage(drawingContext.canvas, -2, -2);
+    drawingContext.drawImage(drawingContext.canvas, 2, 2);
+    drawingContext.restore();
+  }
+  
+  // Post-processing: vignette
+  if (V.effects.indexOf('vignette') >= 0) {
+    var grad = drawingContext.createRadialGradient(width/2,height/2,min(width,height)*0.3,width/2,height/2,min(width,height)*0.8);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(1,'rgba(0,0,0,0.5)');
+    drawingContext.fillStyle = grad;
+    drawingContext.fillRect(0,0,width,height);
+  }
+  
+  // Update HUD
+  var m = Math.floor(t / 60), sec = Math.floor(t % 60);
+  document.getElementById('hud-time').textContent = m + ':' + (sec < 10 ? '0' : '') + sec;
+  document.getElementById('hud-beat').textContent = beat;
+  
+  // Recording indicator
+  if (isRecording) {
+    fill(255, 50, 50, 150 + sin(millis() * 0.01) * 100);
+    noStroke();
+    circle(20, 20, 10);
+    fill(255);
+    textSize(10);
+    textAlign(LEFT, CENTER);
+    text('REC', 30, 20);
+  }
+  
+  } catch(e) { console.error('draw error:', e.message || String(e)); }
+}
+
+// ═══ GEOMETRIC ═══
+function drawGeo(t, beat, al, sc) {
+  var cx = width/2, cy = height/2;
+  var maxR = min(cx, cy) * 0.4;
+  sc = sc || 1;
+  
+  push();
+  translate(cx, cy);
+  scale(sc || 1);
+  
+  for (var l = 0; l < 5; l++) {
+    var col = P[l % P.length];
+    var r = maxR * (0.3 + l * 0.18) * (sin(t * 0.3 + l) * 0.2 + 0.8) * (1 + beatPulse * 0.15);
+    var rot = t * (0.15 + l * 0.05) * (l % 2 === 0 ? 1 : -1);
+    var sides = 3 + l + floor(sin(t * 0.25) * 1.5);
+    
+    push();
+    rotate(rot);
+    
+    var alpha = 180 + al * 75;
+    stroke(col[0], col[1], col[2], min(alpha, 255));
+    strokeWeight(2 + l * 0.4 + bassLevel * 2);
+    noFill();
+    beginShape();
+    for (var i = 0; i <= sides; i++) {
+      var a = (i / sides) * TWO_PI;
+      var vr = r + sin(a * 3 + t * 2) * 15 * V.intensity;
+      vertex(cos(a) * vr, sin(a) * vr);
+    }
+    endShape(CLOSE);
+    
+    fill(col[0], col[1], col[2], 220);
+    noStroke();
+    for (var i = 0; i < sides; i++) {
+      var a2 = (i / sides) * TWO_PI;
+      var vr2 = r + sin(a2 * 3 + t * 2) * 15 * V.intensity;
+      circle(cos(a2) * vr2, sin(a2) * vr2, 4 + l + bassLevel * 6);
+    }
+    pop();
+  }
+  pop();
+}
+
+// ═══ ASCII ═══
+function drawAscii(t, beat, al) {
+  var chars = ' .:-=+*#%@';
+  var aw = 80, ah = 50;
+  var cw = width / aw, ch = height / ah;
+  
+  textAlign(CENTER, CENTER);
+  textSize(cw * 1.1);
+  
+  for (var y = 0; y < ah; y++) {
+    for (var x = 0; x < aw; x++) {
+      var n = noise(x * 0.05, y * 0.06, t * 0.2);
+      // Mix in audio reactivity
+      n = n + bassLevel * 0.3 * sin(x * 0.1 + t);
+      n = constrain(n, 0, 1);
+      var ci = constrain(floor(n * chars.length), 0, chars.length - 1);
+      var bri = 80 + n * 100 + al * 80;
+      var col = P[floor(n * P.length) % P.length];
+      fill(col[0] * bri / 180, col[1] * bri / 180, col[2] * bri / 180);
+      text(chars.charAt(ci), x * cw + cw/2, y * ch + ch/2);
+    }
+  }
+}
+
+// ═══ PARTICLES ═══
+function initParticles() {
+  particles = [];
+  for (var i = 0; i < 300; i++) {
+    particles.push({
+      x: random(width), y: random(height),
+      vx: random(-1,1), vy: random(-1,1),
+      col: P[floor(random(P.length))],
+      size: random(2,5),
+      trail: []
+    });
+  }
+}
+
+function drawParts(t, beat, al) {
+  var speed = 1 + bassLevel * 2;
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    var n = noise(p.x * 0.003, p.y * 0.003, t * 0.1);
+    var a = n * TWO_PI * 4;
+    p.vx += cos(a) * 0.08 * speed;
+    p.vy += sin(a) * 0.08 * speed;
+    p.vx *= 0.97; p.vy *= 0.97;
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = width;
+    if (p.x > width) p.x = 0;
+    if (p.y < 0) p.y = height;
+    if (p.y > height) p.y = 0;
+    
+    p.trail.push({x: p.x, y: p.y});
+    if (p.trail.length > 10 + floor(al * 8)) p.trail.shift();
+  }
+  
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    if (p.trail.length < 2) continue;
+    for (var j = 1; j < p.trail.length; j++) {
+      stroke(p.col[0], p.col[1], p.col[2], (j/p.trail.length)*80);
+      strokeWeight(p.size * (j/p.trail.length) + al * 2);
+      line(p.trail[j-1].x, p.trail[j-1].y, p.trail[j].x, p.trail[j].y);
+    }
+  }
+  
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    fill(p.col[0], p.col[1], p.col[2], 200);
+    noStroke();
+    circle(p.x, p.y, p.size + bassLevel * 4);
+  }
+}
+
+// ═══ WAVEFORM ═══
+function drawWave(t, beat, al, sc) {
+  var bars = 80;
+  var bw = width / bars;
+  var mid = height * 0.55;
+  sc = sc || 1;
+  
+  for (var i = 0; i < bars; i++) {
+    // Mix procedural noise with real audio data
+    var n = noise(i * 0.08, t * 0.4) * V.intensity;
+    var audioFreq = freqData && freqData[i < freqData.length ? i : freqData.length - 1] ? freqData[i < freqData.length ? i : freqData.length - 1] / 255 : 0;
+    var val = n * 0.4 + audioFreq * 0.6 + sin(t * (2.5 + i * 0.05)) * 0.15;
+    var bh = val * height * 0.45 * sc;
+    var col = P[floor((i/bars) * P.length)];
+    
+    for (var sy = 0; sy < floor(min(bh, mid)); sy++) {
+      var alpha = map(sy, 0, bh, 100, 10);
+      fill(col[0], col[1], col[2], alpha);
+      noStroke();
+      rect(i * bw, mid - sy, bw - 1, 1);
+      rect(i * bw, mid + sy, bw - 1, 1);
+    }
+    fill(col[0], col[1], col[2], 200 + al * 55);
+    rect(i * bw, mid - bh, bw - 1, 2);
+    rect(i * bw, mid + bh, bw - 1, 2);
+  }
+}
+
+// ═══ GLITCH ═══
+function drawGlitch(t, beat, al) {
+  var cx = width/2, cy = height/2;
+  
+  push();
+  translate(cx, cy);
+  var extraDistort = bassLevel * 30;
+  for (var i = 0; i < 6; i++) {
+    var col = P[i % P.length];
+    var r = 60 + i * 50 + sin(t * 2 + i) * 15 + beatPulse * 20;
+    stroke(col[0], col[1], col[2], 100);
+    strokeWeight(1.5 + al * 2);
+    noFill();
+    beginShape();
+    for (var j = 0; j <= 50; j++) {
+      var a = (j / 50) * TWO_PI;
+      vertex(cos(a) * (r + noise(a*2,i*0.3,t*0.5)*20 + extraDistort), sin(a) * (r + noise(a*2,i*0.3,t*0.5)*20 + extraDistort));
+    }
+    endShape(CLOSE);
+  }
+  pop();
+  
+  // Glitch blocks - more on bass hits
+  var blockCount = floor(5 + al * 15);
+  for (var i = 0; i < blockCount; i++) {
+    var col = P[floor(random(P.length))];
+    fill(col[0], col[1], col[2], 30 + al * 40);
+    noStroke();
+    rect(random(width), random(height), random(50,200), random(3,15));
+  }
+  
+  // Scan lines on beat
+  if (beatPulse > 0.5) {
+    for (var i = 0; i < 3; i++) {
+      var col = P[floor(random(P.length))];
+      stroke(col[0], col[1], col[2], 40);
+      strokeWeight(1);
+      line(0, random(height), width, random(height));
+    }
+  }
+}
+
+// ═══ MINIMAL ═══
+function drawMin(t, beat, al, sc) {
+  var cx = width/2, cy = height/2;
+  var sz = min(cx, cy) * 0.6 * (sc || 1);
+  var br = sin(t * 0.3) * 0.15 + 0.85;
+  var r = sz * br;
+  
+  noFill();
+  for (var i = 6; i >= 0; i--) {
+    var col = P[i % P.length];
+    stroke(col[0], col[1], col[2], 80 - i * 12 + al * 30);
+    strokeWeight(1.2 + i * 0.15);
+    circle(cx, cy, r * (1 - i * 0.08) * 2 * (1 + beatPulse * 0.1));
+  }
+  
+  var ly = cy + sin(t * 0.25) * cy * 0.5;
+  stroke(P[0][0], P[0][1], P[0][2], 50);
+  strokeWeight(0.6 + al);
+  line(cx - sz * 0.85, ly, cx + sz * 0.85, ly);
+  
+  fill(P[1][0], P[1][1], P[1][2], 220);
+  noStroke();
+  circle(cx, ly, 5 + sin(t * 2) * 2 + bassLevel * 6);
+}
+
+// ═══ RETRO ═══
+function drawRetro(t, beat, al, sc) {
+  var s = 4;
+  var cols = floor(width / s);
+  var rows = floor(height / s);
+  sc = sc || 1;
+  
+  noStroke();
+  for (var y = 0; y < rows; y++) {
+    for (var x = 0; x < cols; x++) {
+      var n = noise(x * 0.06, y * 0.06, t * 0.2);
+      var pi = floor(n * P.length);
+      var col = P[constrain(pi, 0, P.length - 1)];
+      var bri = 140 + al * 80 * sc;
+      fill(col[0], col[1], col[2], bri);
+      rect(x * s, y * s, s, s);
+    }
+  }
+  
+  stroke(0, 0, 0, 30);
+  strokeWeight(0.5);
+  for (var x = 0; x < width; x += s) line(x, 0, x, height);
+  for (var y = 0; y < height; y += s) line(0, y, width, y);
+  
+  var cx = width/2, cy = height/3;
+  fill(P[0][0], P[0][1], P[0][2], 180 + al * 40);
+  noStroke();
+  rect(cx - s * 8, cy - s * 6, s * 16, s * 12, 4);
+  fill(P[1][0], P[1][1], P[1][2], 200 + al * 40);
+  rect(cx - s * 5, cy - s * 3, s * 10, s * 6, 3);
+}
+
+// ═══ ORGANIC ═══
+function initOrganic() {
+  organicNodes = [];
+  organicConns = [];
+  var n = 40;
+  for (var i = 0; i < n; i++) {
+    organicNodes.push({
+      bx: random(width), by: random(height),
+      x: 0, y: 0,
+      col: P[floor(random(P.length))],
+      phase: random(TWO_PI), freq: random(0.3, 1.5)
+    });
+  }
+  for (var i = 0; i < n; i++) {
+    for (var j = i + 1; j < n; j++) {
+      var dx = organicNodes[i].bx - organicNodes[j].bx;
+      var dy = organicNodes[i].by - organicNodes[j].by;
+      if (sqrt(dx*dx + dy*dy) < width * 0.25) {
+        organicConns.push({a: i, b: j});
+      }
+    }
+  }
+}
+
+function drawOrg(t, beat, al) {
+  if (organicNodes.length === 0) initOrganic();
+  
+  var drift = V.intensity * (1 + al * 0.5);
+  for (var i = 0; i < organicNodes.length; i++) {
+    var node = organicNodes[i];
+    var n = noise(node.bx * 0.002, node.by * 0.002, t * 0.15);
+    var a = n * TWO_PI * 4;
+    var d = noise(node.bx * 0.004, node.by * 0.004, t * 0.12 + 200) * 150 * drift;
+    node.x = node.bx + cos(a) * d + sin(t * node.freq + node.phase) * 30;
+    node.y = node.by + sin(a) * d + cos(t * node.freq * 0.7 + node.phase) * 30;
+  }
+  
+  strokeWeight(0.6 + al);
+  for (var i = 0; i < organicConns.length; i++) {
+    var a = organicNodes[organicConns[i].a];
+    var b = organicNodes[organicConns[i].b];
+    stroke((a.col[0]+b.col[0])/2, (a.col[1]+b.col[1])/2, (a.col[2]+b.col[2])/2, 25 + al * 30);
+    line(a.x, a.y, b.x, b.y);
+  }
+  
+  for (var i = 0; i < organicNodes.length; i++) {
+    var node = organicNodes[i];
+    fill(node.col[0], node.col[1], node.col[2], 200);
+    noStroke();
+    circle(node.x, node.y, 4 + bassLevel * 4);
+  }
+}
+
+// ═══ KEYBOARD ═══
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas(S.name + '-frame', 'png');
+  if (key === 'f' || key === 'F') toggleFullscreen();
+  if (key === 'a' || key === 'A') toggleAudio();
+  if (key === 'r' || key === 'R') toggleRecord();
+  if (key === ' ') { cycleStyle(); return false; }
+  var styles = ['ascii','geometric','particles','waveform','glitch','minimal','retro','organic'];
+  var idx = parseInt(key) - 1;
+  if (idx >= 0 && idx < styles.length) {
+    V.style = styles[idx];
+    currentStyleIdx = idx;
+    if (V.style === 'particles') initParticles();
+    if (V.style === 'organic') initOrganic();
+    document.getElementById('hud-style').textContent = V.style;
+  }
+}
+
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+</script>
+</body>
+</html>

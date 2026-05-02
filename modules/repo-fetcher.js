@@ -143,16 +143,33 @@ function parseRepoUrl(url) {
   return { owner: match[1].replace(/^@/, ''), repo: match[2].replace(/\.git$/, '') };
 }
 
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
 async function fetchRepo(repoUrl, options = {}) {
   const { owner, repo } = parseRepoUrl(repoUrl);
   const maxFiles = options.maxFiles || 60;
   const mode = options.mode || 'balanced';
+  const fetchConcurrency = Math.max(1, parseInt(process.env.AUDIT_FETCH_CONCURRENCY || '8', 10) || 8);
 
-  // Step 1: Get repo metadata
-  const meta = await githubFetch(`/repos/${owner}/${repo}`);
-
-  // Step 2: Get tree (full recursive)
-  const treeData = await githubFetch(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+  // Step 1: Get repo metadata and tree. These API calls are independent.
+  const [meta, treeData] = await Promise.all([
+    githubFetch(`/repos/${owner}/${repo}`),
+    githubFetch(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`),
+  ]);
 
   // Step 3: Filter and prioritize files
   const files = treeData.tree
@@ -167,8 +184,8 @@ async function fetchRepo(repoUrl, options = {}) {
 
   console.log(`Found ${files.length} important files (of ${treeData.tree?.length || 0} total)`);
 
-  // Step 4: Fetch file contents
-  for (const file of files) {
+  // Step 4: Fetch file contents with bounded concurrency.
+  await mapLimit(files, fetchConcurrency, async (file) => {
     try {
       const content = await githubFetch(`/repos/${owner}/${repo}/contents/${file.path}`);
       file.content = Buffer.from(content.content, 'base64').toString('utf-8');
@@ -176,7 +193,7 @@ async function fetchRepo(repoUrl, options = {}) {
       console.warn(`  Failed to fetch ${file.path}: ${e.message.slice(0, 100)}`);
       file.content = '(unavailable)';
     }
-  }
+  });
 
   return {
     metadata: {

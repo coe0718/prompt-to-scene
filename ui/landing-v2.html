@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Archiview — Autonomous Code Review by AI Agents</title>
+<meta name="description" content="Point Archiview at any GitHub repo. It reads your code, finds the bugs, scores quality across 5 axes, and generates fix plans — all autonomously.">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#05070c;--surface:rgba(255,255,255,0.03);--surface2:rgba(255,255,255,0.06);--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);--text:#eef0f6;--muted:#7a8296;--dim:#3d4358;--accent:#7c5cfc;--accent2:#a78bfa;--accent3:#5ce1e6;--green:#4ade80;--amber:#fbbf24;--pink:#fc5c7d;--radius:12px;--radius-lg:20px}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+
+/* ─── ambient bg ─── */
+.bg{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 70% 55% at 15% 25%,rgba(124,92,252,0.08) 0%,transparent 55%),radial-gradient(ellipse 60% 50% at 85% 75%,rgba(92,225,230,0.05) 0%,transparent 50%),radial-gradient(ellipse 40% 40% at 50% 50%,rgba(252,92,125,0.03) 0%,transparent 45%),var(--bg);animation:ambient 20s ease-in-out infinite alternate}
+@keyframes ambient{0%{filter:hue-rotate(-10deg) saturate(0.9)}50%{filter:hue-rotate(15deg) saturate(1.1)}100%{filter:hue-rotate(-5deg) saturate(0.95)}}
+
+/* ─── noise overlay ─── */
+.noise{position:fixed;inset:0;z-index:-1;opacity:.025;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:256px 256px}
+.container{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* ─── nav ─── */
+nav{padding:18px 0;display:flex;align-items:center;justify-content:space-between;position:relative}
+nav:after{content:'';position:absolute;bottom:0;left:24px;right:24px;height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent)}
+.logo{font-size:1.15rem;font-weight:800;letter-spacing:-0.03em}
+.logo span{color:var(--accent)}
+.nav-links{display:flex;gap:32px;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:.88rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:8px;font-size:.88rem;font-weight:600;text-decoration:none;cursor:pointer;border:none;transition:all .25s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#6a4be0);color:#fff;box-shadow:0 2px 20px rgba(124,92,252,0.25)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 4px 30px rgba(124,92,252,0.35)}
+.btn-glass{background:var(--surface2);border:1px solid var(--border);color:var(--text);backdrop-filter:blur(12px)}
+.btn-glass:hover{border-color:var(--accent);color:var(--accent2);transform:translateY(-1px)}
+.btn-ghost{color:var(--muted);padding:10px 16px}
+.btn-ghost:hover{color:var(--text)}
+
+/* ─── hero ─── */
+.hero{padding:100px 0 60px;text-align:center;position:relative}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:99px;background:rgba(124,92,252,0.1);border:1px solid rgba(124,92,252,0.2);font-size:.75rem;color:var(--accent2);letter-spacing:.06em;text-transform:uppercase;font-weight:600;margin-bottom:28px}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.hero h1{font-size:clamp(2.6rem,7vw,4.5rem);font-weight:900;letter-spacing:-0.05em;line-height:1.05;margin-bottom:20px;background:linear-gradient(135deg,#fff 30%,var(--accent2) 70%,var(--accent3) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-size:200% auto;animation:gradientShift 6s ease infinite}
+@keyframes gradientShift{0%,100%{background-position:0% center}50%{background-position:100% center}}
+.hero .sub{font-size:1.1rem;color:var(--muted);max-width:640px;margin:0 auto 16px;line-height:1.7}
+.hero .tagline{font-size:.92rem;color:var(--accent3);max-width:520px;margin:0 auto 36px;font-weight:500;font-family:'JetBrains Mono',monospace;letter-spacing:-0.02em}
+.hero-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* ─── hero live preview ─── */
+.hero-preview{margin-top:56px;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);background:var(--surface);box-shadow:0 40px 80px -20px rgba(0,0,0,0.6);position:relative}
+.hero-preview-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.preview-dot{width:10px;height:10px;border-radius:50%;background:var(--dim)}
+.preview-dot.red{background:#ff5f57}
+.preview-dot.yellow{background:#febc2e}
+.preview-dot.green{background:#28c840}
+.preview-url{flex:1;text-align:left;font-size:.78rem;color:var(--muted);font-family:'JetBrains Mono',monospace;padding:4px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
+.hero-preview iframe{width:100%;height:480px;border:none;display:block}
+
+/* ─── stats bar ─── */
+.stats{padding:50px 0;display:flex;justify-content:center;gap:56px;flex-wrap:wrap}
+.stat{text-align:center}
+.stat-num{font-size:2.4rem;font-weight:900;letter-spacing:-0.04em;background:linear-gradient(135deg,var(--accent2),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-num.accent{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text}
+.stat-num.green{background:linear-gradient(135deg,var(--green),#22d3ee);-webkit-background-clip:text}
+.stat-num.amber{background:linear-gradient(135deg,var(--amber),var(--pink));-webkit-background-clip:text}
+.stat-label{font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+
+/* ─── section headers ─── */
+.section{padding:90px 0}
+.section-label{text-align:center;font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent2);margin-bottom:10px;font-weight:600}
+.section-title{text-align:center;font-size:2.2rem;font-weight:800;letter-spacing:-0.04em;margin-bottom:56px;line-height:1.2}
+.section-title em{font-style:normal;background:linear-gradient(135deg,var(--accent2),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* ─── pipeline ─── */
+.pipeline{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.pipe-card{padding:28px 24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);position:relative;overflow:hidden;transition:border-color .3s,transform .2s}
+.pipe-card:hover{border-color:rgba(124,92,252,0.3);transform:translateY(-2px)}
+.pipe-step{position:absolute;top:12px;right:16px;font-size:.68rem;font-weight:700;color:var(--dim);letter-spacing:.1em}
+.pipe-icon{font-size:1.8rem;margin-bottom:14px;display:block}
+.pipe-card h4{font-size:.95rem;font-weight:700;margin-bottom:6px}
+.pipe-card p{font-size:.82rem;color:var(--muted);line-height:1.6}
+.pipe-arrow{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:1.2rem}
+
+/* ─── pipeline connector ─── */
+@media(min-width:768px){
+  .pipeline-wrap{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:0}
+  .pipe-connector{display:flex;align-items:center;justify-content:center;padding:0 8px;position:relative}
+  .pipe-connector svg{color:var(--dim);width:28px;height:28px}
+}
+
+/* ─── features ─── */
+.feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.feat-card{padding:28px 24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);transition:all .25s;position:relative;overflow:hidden}
+.feat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;transition:opacity .3s}
+.feat-card:hover::before{opacity:1}
+.feat-card:hover{border-color:rgba(124,92,252,0.25);transform:translateY(-2px);box-shadow:0 8px 30px -10px rgba(124,92,252,0.15)}
+.feat-emoji{font-size:1.6rem;margin-bottom:12px;display:block}
+.feat-card h4{font-size:.92rem;font-weight:700;margin-bottom:6px}
+.feat-card p{font-size:.8rem;color:var(--muted);line-height:1.6}
+
+/* ─── agents ─── */
+.agent-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.agent-card{padding:28px 24px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);transition:all .25s}
+.agent-card:hover{border-color:rgba(124,92,252,0.3);transform:translateY(-2px)}
+.agent-avatar{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:14px;background:rgba(124,92,252,0.1);border:1px solid rgba(124,92,252,0.15)}
+.agent-card h3{font-size:1rem;font-weight:700;margin-bottom:2px}
+.agent-role{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--accent2);margin-bottom:10px;font-weight:600}
+.agent-card p{font-size:.82rem;color:var(--muted);line-height:1.6}
+.agent-stat{font-size:.75rem;color:var(--amber);margin-top:10px}
+
+/* ─── timeline ─── */
+.timeline{position:relative;max-width:700px;margin:0 auto;padding-left:0}
+.timeline::before{content:'';position:absolute;left:19px;top:8px;bottom:8px;width:2px;background:linear-gradient(180deg,var(--accent),var(--accent3))}
+.tl-item{position:relative;padding:0 0 40px 56px}
+.tl-item:last-child{padding-bottom:0}
+.tl-dot{position:absolute;left:12px;top:4px;width:16px;height:16px;border-radius:50%;background:var(--bg);border:3px solid var(--accent);box-shadow:0 0 0 4px rgba(124,92,252,0.15)}
+.tl-day{font-size:.7rem;text-transform:uppercase;letter-spacing:.09em;color:var(--accent2);margin-bottom:4px;font-weight:600}
+.tl-item h3{font-size:.95rem;font-weight:700;margin-bottom:4px}
+.tl-item p{font-size:.82rem;color:var(--muted);line-height:1.6}
+
+/* ─── commits ─── */
+.commit-table{width:100%;max-width:800px;margin:40px auto 0;border-collapse:collapse;font-size:.84rem}
+.commit-table th{text-align:left;padding:10px 16px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.06em}
+.commit-table td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:top}
+.commit-hash{font-family:'JetBrains Mono',monospace;color:var(--green);font-size:.76rem;white-space:nowrap}
+.commit-agent{font-size:.76rem;color:var(--accent2)}
+.commit-desc{color:var(--text);max-width:380px}
+
+/* ─── demo embed ─── */
+.demo-wrap{border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);background:var(--surface);box-shadow:0 32px 80px -20px rgba(0,0,0,0.5);position:relative}
+.demo-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.demo-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.5s ease-in-out infinite}
+.demo-label{font-size:.74rem;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+.demo-wrap iframe{width:100%;height:520px;border:none;display:block}
+
+/* ─── CTA ─── */
+.cta-section{padding:100px 0;text-align:center;border-top:1px solid var(--border);position:relative}
+.cta-section::before{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:200px;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.cta-section h2{font-size:2.6rem;font-weight:900;letter-spacing:-0.04em;margin-bottom:12px;background:linear-gradient(135deg,#fff,var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.cta-section p{color:var(--muted);margin-bottom:32px;font-size:1.05rem}
+.cta-section .btn-primary{font-size:1rem;padding:14px 36px}
+
+/* ─── footer ─── */
+footer{padding:28px 0;text-align:center;font-size:.8rem;color:var(--muted);border-top:1px solid var(--border)}
+
+@media(max-width:640px){
+  .nav-links{display:none}
+  .hero{padding:60px 0 40px}
+  .hero h1{font-size:2rem}
+  .feat-grid{grid-template-columns:repeat(2,1fr)}
+  .stats{gap:24px}
+  .stats{gap:28px}
+  .stat-num{font-size:1.8rem}
+  .section-title{font-size:1.5rem}
+  .pipeline{grid-template-columns:1fr}
+  .demo-wrap iframe{height:360px}
+  .cta-section h2{font-size:1.8rem}
+}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="noise"></div>
+
+<!-- ─── NAV ─── -->
+<nav class="container">
+  <div class="logo">archi<span>view</span></div>
+  <div class="nav-links">
+    <a href="#pipeline">Pipeline</a>
+    <a href="#features">Features</a>
+    <a href="#agents">Agents</a>
+    <a href="#proof">Proof</a>
+    <a href="/audit" style="color:var(--accent2);font-weight:600;">Launch →</a>
+  </div>
+  <a href="/audit" class="btn btn-primary">Run an Audit →</a>
+</nav>
+
+<!-- ─── HERO ─── -->
+<section class="hero container">
+  <div class="hero-badge"><span class="badge-dot"></span> Built by Autonomous AI Agents</div>
+  <h1>Point it at a repo.<br>It reads everything.</h1>
+  <p class="sub">Archiview analyzes any public GitHub repo — architecture, code quality, security, docs, maintainability. Scores, findings, fix plans. All without a human touching the keyboard.</p>
+  <p class="tagline">›› One URL. A few minutes. A full audit.</p>
+  <div class="hero-cta">
+    <a href="/audit" class="btn btn-primary" style="font-size:1rem;padding:14px 32px">Try the Auditor →</a>
+    <a href="#pipeline" class="btn btn-glass" style="font-size:1rem;padding:14px 28px">See How It Works</a>
+  </div>
+
+  <div class="hero-preview">
+    <div class="hero-preview-bar">
+      <div class="preview-dot red"></div>
+      <div class="preview-dot yellow"></div>
+      <div class="preview-dot green"></div>
+      <span class="preview-url">archiview — Autonomous Code Review</span>
+    </div>
+    <iframe src="/audit" title="Archiview Demo" loading="lazy"></iframe>
+  </div>
+</section>
+
+<!-- ─── STATS ─── -->
+<div class="stats container">
+  <div class="stat"><div class="stat-num accent">4</div><div class="stat-label">AI Agents</div></div>
+  <div class="stat"><div class="stat-num green">5</div><div class="stat-label">Days to Ship</div></div>
+  <div class="stat"><div class="stat-num amber">21+</div><div class="stat-label">Commits</div></div>
+  <div class="stat"><div class="stat-num accent">0</div><div class="stat-label">Human Lines</div></div>
+  <div class="stat"><div class="stat-num green">3</div><div class="stat-label">Pass Pipeline</div></div>
+  <div class="stat"><div class="stat-num amber">5</div><div class="stat-label">Score Axes</div></div>
+</div>
+
+<!-- ─── PIPELINE ─── -->
+<section class="section container" id="pipeline">
+  <div class="section-label">How It Works</div>
+  <div class="section-title">Three passes. One <em>verdict</em>.</div>
+  <div class="pipeline">
+    <div class="pipe-card"><span class="pipe-step">PASS 01</span><span class="pipe-icon">🔭</span><h4>Structural Analysis</h4><p>Reads README, config files, directory tree, build system. Maps the architecture, framework, and language before diving into code.</p><div style="margin-top:12px;font-size:.72rem;color:var(--dim);font-family:'JetBrains Mono',monospace">Model: Kimi K2.6</div></div>
+    <div class="pipe-card"><span class="pipe-step">PASS 02</span><span class="pipe-icon">🔬</span><h4>Deep Code Review</h4><p>Every source file chunked and analyzed for code quality, security vulnerabilities, maintainability, and anti-patterns. One file at a time.</p><div style="margin-top:12px;font-size:.72rem;color:var(--dim);font-family:'JetBrains Mono',monospace">Model: MiniMax M2.7</div></div>
+    <div class="pipe-card"><span class="pipe-step">PASS 03</span><span class="pipe-icon">🧠</span><h4>Aggregation</h4><p>All findings merged into prioritized scores across 5 axes. Generates the final report with radar chart, badge, and optional fix PR.</p><div style="margin-top:12px;font-size:.72rem;color:var(--dim);font-family:'JetBrains Mono',monospace">Model: Kimi K2.6</div></div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ─── -->
+<section class="section container" id="features">
+  <div class="section-label">What You Get</div>
+  <div class="section-title">Everything to understand a <em>codebase</em></div>
+  <div class="feat-grid">
+    <div class="feat-card"><span class="feat-emoji">📊</span><h4>5-Axis Radar</h4><p>Architecture, Code Quality, Security, Documentation, Maintainability — each scored 0-100 with a generated SVG radar chart.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🔍</span><h4>Prioritized Findings</h4><p>CRITICAL / WARNING / INFO with exact file paths, line numbers, and concrete fix suggestions you can act on.</p></div>
+    <div class="feat-card"><span class="feat-emoji">⚡</span><h4>Live SSE Streaming</h4><p>Watch each pass execute in real time — structural scan, per-file deep analysis, and final aggregation. No waiting blindly.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🔧</span><h4>Smart PR Generation</h4><p>3-layer safety gates: upstream filter → selector → post-fixer validation. Dry-run only — you decide when to publish.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🏷️</span><h4>SVG Score Badge</h4><p>Embeddable badge for any README. Color-coded by overall score, links back to the full report. Show off your quality.</p></div>
+    <div class="feat-card"><span class="feat-emoji">📦</span><h4>Standalone Reports</h4><p>Self-contained HTML with all CSS inlined. Download, print as PDF, share a link. Works offline, forever.</p></div>
+    <div class="feat-card"><span class="feat-emoji">📈</span><h4>Historical Trends</h4><p>Re-audit any repo to track score changes over time. See if your architecture, security, and code quality are improving or slipping.</p></div>
+    <div class="feat-card"><span class="feat-emoji">🏆</span><h4>Famous Benchmarks</h4><p>Pre-loaded audits of React, Express, Prettier, and more. Compare your project's scores against industry-leading open-source codebases.</p></div>
+  </div>
+</section>
+
+<!-- ─── AGENTS ─── -->
+<section class="section container" id="agents">
+  <div class="section-label">The Team</div>
+  <div class="section-title">Four agents, zero <em>human</em> code</div>
+  <div class="agent-grid">
+    <div class="agent-card">
+      <div class="agent-avatar">🛠️</div>
+      <h3>Drey</h3>
+      <div class="agent-role">Coding Specialist</div>
+      <p>Built the entire server, 3-pass LLM pipeline, repo fetcher, report generator with SVG charts, badge endpoint, scan history, PR generator, and Docker deploy.</p>
+      <div class="agent-stat">15+ commits</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-avatar">🔍</div>
+      <h3>Vex</h3>
+      <div class="agent-role">Code Reviewer</div>
+      <p>Reviewed every PR. Caught critical bugs in JSON parsing, LLM response truncation, and error handling paths. Enforced modular architecture.</p>
+      <div class="agent-stat">4 code reviews</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-avatar">🔬</div>
+      <h3>Scout</h3>
+      <div class="agent-role">Scout / Researcher</div>
+      <p>Tested LLM models across providers, validated Kimi K2.6 and MiniMax M2.7 for pipeline roles, scouted rate limits and response quality.</p>
+      <div class="agent-stat">Research reports</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-avatar">📝</div>
+      <h3>Herald</h3>
+      <div class="agent-role">Documentarian</div>
+      <p>Wrote README, landing pages, submission materials. Documented architecture, API endpoints, deployment. Authored this page.</p>
+      <div class="agent-stat">Documentation</div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted)">
+    Orchestrated by <strong style="color:var(--accent2)">Tuck</strong> — the director agent who guided every decision, review, and ship
+  </div>
+</section>
+
+<!-- ─── TIMELINE ─── -->
+<section class="section container" id="timeline">
+  <div class="section-label">Development</div>
+  <div class="section-title">5 days. 21+ commits. <em>All AI</em>.</div>
+  <div class="timeline">
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">Day 1</div><h3>Pipeline Design</h3><p>Scout scouted LLM providers. Drey designed the 3-pass pipeline, built the repo fetcher and GitHub API integration.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">Day 2</div><h3>Analysis Engine</h3><p>Drey built chunked analysis, 5-axis scoring, SSE streaming. Integrated Kimi K2.6 for structure and MiniMax M2.7 for deep review.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">Day 3</div><h3>Reports + UI</h3><p>Drey built the report generator with SVG radar chart, auditor UI with live streaming, scan history, and shareable links.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">Day 4</div><h3>PR Generation</h3><p>Drey built the 3-layer safety-gated PR generator. Vex caught truncation bugs. Scout tested end-to-end.</p></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-day">Day 5</div><h3>Ship</h3><p>SVG badge, Docker compose, self-audit. Vex validated error paths. Herald wrote docs and landing page.</p></div>
+  </div>
+</section>
+
+<!-- ─── COMMITS ─── -->
+<section class="section container" id="proof">
+  <div class="section-label">Proof</div>
+  <div class="section-title">Every commit was <em>AI-authored</em></div>
+  <table class="commit-table">
+    <tr><th>Commit</th><th>Agent</th><th>What Happened</th></tr>
+    <tr><td><span class="commit-hash">51adec1</span></td><td><span class="commit-agent">Drey</span></td><td class="commit-desc">Core pipeline: repo fetcher, 3-pass LLM analysis, report generator with radar chart</td></tr>
+    <tr><td><span class="commit-hash">bc4ddac</span></td><td><span class="commit-agent">Drey</span></td><td class="commit-desc">SSE streaming, scan history, famous repo seeder, self-audit, share URLs</td></tr>
+    <tr><td><span class="commit-hash">4de2b9b</span></td><td><span class="commit-agent">Vex → Drey</span></td><td class="commit-desc">Vex caught JSON parsing bugs. Drey added double-parse safety + truncation recovery</td></tr>
+    <tr><td><span class="commit-hash">30f3e29</span></td><td><span class="commit-agent">Drey</span></td><td class="commit-desc">PR generator with 3-layer safety gates, structured rejection summaries, dry-run packages</td></tr>
+    <tr><td><span class="commit-hash">d78b726</span></td><td><span class="commit-agent">Vex → Drey</span></td><td class="commit-desc">PR publish safety gates: upstream filter, path rejection, post-fixer validation. Demo artifacts</td></tr>
+  </table>
+</section>
+
+<!-- ─── CTA ─── -->
+<section class="cta-section">
+  <div class="container">
+    <h2>Audit any repo. Right now.</h2>
+    <p>No sign-up. No install. Just paste a GitHub URL.</p>
+    <a href="/audit" class="btn btn-primary">Run an Audit →</a>
+  </div>
+</section>
+
+<footer class="container">
+  Archiview — Built entirely by <strong>autonomous AI agents</strong><br>
+  <span style="opacity:0.5;margin-top:6px;display:inline-block;font-size:.74rem;">Designed, coded, reviewed, and shipped by four AI agents · Zero human-written code</span>
+</footer>
+</body>
+</html>
