@@ -898,6 +898,30 @@ function handleBadge(req, res, url) {
   res.end(svg);
 }
 
+function dryRunToPrPlan(dryRun) {
+  if (!dryRun?.patch || !dryRun?.pr_draft) return null;
+  return {
+    pr_title: dryRun.pr_draft.title,
+    pr_body: dryRun.pr_draft.body,
+    branch_name: dryRun.pr_draft.branch,
+    publishable: Boolean(dryRun.patch.replacement_content),
+    files: [{
+      path: dryRun.patch.file,
+      change_type: dryRun.patch.change_type || 'modify',
+      description: dryRun.patch.rationale || dryRun.selected_finding?.title || `Update ${dryRun.patch.file}`,
+      code_snippet: dryRun.patch.replacement_content,
+    }],
+  };
+}
+
+function publicPrPlan(prPlan) {
+  if (!prPlan) return null;
+  return {
+    ...prPlan,
+    files: (prPlan.files || []).map(({ code_snippet, ...file }) => file),
+  };
+}
+
 // ─── PR Plan Generation Handler ──────────────────────────────────────────────
 
 async function handleAuditPR(req, res) {
@@ -920,11 +944,22 @@ async function handleAuditPR(req, res) {
   console.log(`PR Plan: Generating for ${repoUrl}...`);
   try {
     const planResult = await repoAuditor.generateFixPR(cached.result, repoUrl);
+    const prPlan = planResult.pr_plan || dryRunToPrPlan(planResult.dry_run);
+    const response = {
+      ...planResult,
+      pr: planResult.pr || publicPrPlan(prPlan),
+    };
+    delete response.pr_plan;
 
-    // Cache the dry-run result (no auto-publishing yet)
-    auditCache.set(repoUrl, { ...cached, dryRun: planResult.dry_run, dryRunTimestamp: Date.now() });
+    // Cache the publishable plan server-side; the UI only receives display metadata.
+    auditCache.set(repoUrl, {
+      ...cached,
+      dryRun: planResult.dry_run,
+      prPlan,
+      dryRunTimestamp: Date.now(),
+    });
 
-    jsonResponse(res, 200, planResult);
+    jsonResponse(res, 200, response);
   } catch(e) {
     console.error(`PR Plan error for ${repoUrl}:`, e.message);
     jsonResponse(res, 500, { error: 'PR generation failed: ' + e.message.slice(0, 200) });
@@ -943,7 +978,7 @@ async function handleAuditPRPublish(req, res) {
 
   // Use cached PR plan, or accept one in the request body
   const cached = auditCache.get(repoUrl);
-  const prPlan = body.pr_plan || cached?.prPlan;
+  const prPlan = body.pr_plan || body.pr || cached?.prPlan || dryRunToPrPlan(cached?.dryRun);
 
   if (!prPlan) {
     return jsonResponse(res, 400, {
@@ -955,7 +990,7 @@ async function handleAuditPRPublish(req, res) {
     return jsonResponse(res, 400, {
       error: 'GITHUB_TOKEN not configured. Set GITHUB_TOKEN in .env to publish PRs.',
       note: 'PR plan was generated but cannot be published without a GitHub token.',
-      prPlan, // Return the plan so the user can still see it
+      prPlan: publicPrPlan(prPlan), // Return display metadata only.
     });
   }
 

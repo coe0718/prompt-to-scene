@@ -4,6 +4,16 @@
 # Dependencies
 node_modules/
 
+# Generated/debug artifacts
+*.log
+*.bak
+*.patch
+data/reports/
+data/pr-dry-run/
+data/pr-dry-run.json
+data/ky-pr-source-first.json
+demo_artifacts/
+
 # OS junk
 .DS_Store
 Thumbs.db

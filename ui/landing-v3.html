@@ -884,6 +884,21 @@ async function refreshHistory() {
 refreshHistory();
 setInterval(refreshHistory, 10000);
 
+function dryRunToUiPr(dryRun) {
+  if (!dryRun || !dryRun.patch || !dryRun.pr_draft) return null;
+  return {
+    pr_title: dryRun.pr_draft.title,
+    pr_body: dryRun.pr_draft.body,
+    branch_name: dryRun.pr_draft.branch,
+    publishable: false,
+    files: [{
+      path: dryRun.patch.file,
+      change_type: dryRun.patch.change_type || 'modify',
+      description: dryRun.patch.rationale || (dryRun.selected_finding && dryRun.selected_finding.title) || '',
+    }],
+  };
+}
+
 async function generatePR() {
   const btn = document.getElementById('pr-btn');
   const progress = document.getElementById('pr-progress');
@@ -913,13 +928,13 @@ async function generatePR() {
       return;
     }
 
-    if (!data.pr) {
+    const pr = data.pr || dryRunToUiPr(data.dry_run);
+    if (!pr) {
       planDiv.innerHTML = '<span style="color:var(--amber);">' + escHtml(data.message || 'No issues found for PR') + '</span>';
       planDiv.style.display = 'block';
       return;
     }
 
-    const pr = data.pr;
     let filesHtml = '';
     if (pr.files && pr.files.length > 0) {
       filesHtml = '<div style="margin-top:12px;"><strong style="font-size:0.85rem;color:var(--muted);">FILES CHANGED</strong>';
@@ -937,6 +952,13 @@ async function generatePR() {
       filesHtml += '</div>';
     }
 
+    const publishButton = pr.publishable === false
+      ? '<button class="btn btn-glass" disabled style="flex-shrink:0;white-space:nowrap;opacity:0.65;">Publish unavailable</button>'
+      : '<button class="btn btn-primary" onclick="publishPR()" style="flex-shrink:0;white-space:nowrap;">Publish PR to GitHub</button>';
+    const publishStatus = pr.publishable === false
+      ? '<div id="pr-publish-status" style="margin-top:12px;color:var(--amber);">This older dry-run lacks replacement content. Regenerate the PR plan to enable publishing.</div>'
+      : '<div id="pr-publish-status" style="margin-top:12px;"></div>';
+
     planDiv.innerHTML =
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">' +
         '<div style="flex:1;min-width:0;">' +
@@ -945,10 +967,10 @@ async function generatePR() {
           '<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">' + escHtml((pr.pr_body || '').slice(0, 200)) + ((pr.pr_body || '').length > 200 ? '...' : '') + '</div>' +
           '<div style="color:var(--muted);font-size:0.8rem;margin-top:6px;">Branch: <code style="color:var(--cyan);">' + escHtml(pr.branch_name || 'auto') + '</code></div>' +
         '</div>' +
-        '<button class="btn btn-primary" onclick="publishPR()" style="flex-shrink:0;white-space:nowrap;">Publish PR to GitHub</button>' +
+        publishButton +
       '</div>' +
       filesHtml +
-      '<div id="pr-publish-status" style="margin-top:12px;"></div>';
+      publishStatus;
     planDiv.style.display = 'block';
   } catch(e) {
     planDiv.innerHTML = '<span style="color:var(--red);">' + escHtml(e.message) + '</span>';
