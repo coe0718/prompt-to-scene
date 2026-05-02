@@ -453,9 +453,9 @@ if (url.pathname === '/audit') {
   return serveFile(res, path.join(ROOT, 'ui', 'auditor.html'));
 }
 
- // ── Static files ──
+ // ── Landing page (v3) — primary entry ──
  if (url.pathname === '/' || url.pathname === '/index.html') {
-  return serveFile(res, path.join(ROOT, 'ui', 'auditor.html'));
+  return serveFile(res, path.join(ROOT, 'ui', 'landing-v3.html'));
  }
   // ui/ prefix
   if (url.pathname.startsWith('/ui/')) {
