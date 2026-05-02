@@ -635,7 +635,7 @@ async function runAudit() {
     writeTerminal('[fetch] Opening audit stream...', 'out');
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 240000);
+    const timeoutId = setTimeout(() => controller.abort(), 1800000);
 
     const resp = await fetch('/api/audit', {
       method: 'POST',

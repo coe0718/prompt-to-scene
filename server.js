@@ -768,11 +768,16 @@ async function handleAudit(req, res) {
     'Access-Control-Allow-Origin': '*',
   });
 
+  const auditTimeoutMs = parseInt(process.env.AUDIT_STREAM_TIMEOUT_MS || '1800000', 10);
   let timedOut = false;
   let reqClosed = false;
-  res.on('close', () => { reqClosed = true; });
+  let heartbeat = null;
+  res.on('close', () => {
+    reqClosed = true;
+    clearInterval(heartbeat);
+  });
   
-  res.setTimeout(240000, () => {
+  res.setTimeout(auditTimeoutMs, () => {
     timedOut = true;
     if (!res.writableEnded) {
       try { res.write(`event: error\ndata: ${JSON.stringify({ message: 'Audit timed out. Try a smaller repo.' })}\n\n`); } catch(e) {}
@@ -785,6 +790,10 @@ async function handleAudit(req, res) {
       try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch(e) {}
     }
   };
+
+  heartbeat = setInterval(() => {
+    send('heartbeat', { timestamp: Date.now() });
+  }, 15000);
 
   try {
     send('progress', { step: 'fetch', message: 'Fetching repo from GitHub...' });
@@ -827,6 +836,7 @@ async function handleAudit(req, res) {
     saveHistory();
 
     send('complete', { html: htmlReport });
+    clearInterval(heartbeat);
     // Persist report to file for /report route
     try {
       var safeName = repoUrl.replace(/https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9_\/-]/g, '_').replace(/\//g, '__');
@@ -837,6 +847,7 @@ async function handleAudit(req, res) {
 
     res.end();
   } catch(e) {
+    clearInterval(heartbeat);
     console.error(`Audit error for ${repoUrl}:`, e.message);
     if (!res.writableEnded) {
       send('error', { message: e.message.slice(0, 300) });
