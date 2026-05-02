@@ -882,7 +882,7 @@ async function runAudit() {
     result.innerHTML = '<iframe srcdoc="' + escHtml(reportHtml) + '" title="Audit Report"></iframe>';
     toolbar.style.display = 'flex';
     clearInterval(timerInterval);
-    status.innerHTML = '<span style="color:var(--green);">✓ Audit complete. Report loaded above.</span>';
+    status.innerHTML = '<span style="color:var(--green);">✓ Audit complete. Report loaded below.</span>';
     lastAuditedRepo = repo;
     document.getElementById('pr-section').style.display = 'block';
     refreshHistory();
