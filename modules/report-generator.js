@@ -88,7 +88,14 @@ function generateReport(auditResult, repoUrl) {
     </div>`;
   };
 
-  const findingsHtml = (findings || []).map(f => {
+  const severityRank = { CRITICAL: 0, WARNING: 1, INFO: 2 };
+  const sortedFindings = [...(findings || [])].sort((a, b) => {
+    const aRank = severityRank[String(a.severity || '').toUpperCase()] ?? 99;
+    const bRank = severityRank[String(b.severity || '').toUpperCase()] ?? 99;
+    return aRank - bRank;
+  });
+
+  const findingsHtml = sortedFindings.map(f => {
     const severityColor = f.severity === 'CRITICAL' ? 'var(--red)' : f.severity === 'WARNING' ? 'var(--amber)' : 'var(--cyan)';
     return `<div class="finding" style="border-left:3px solid ${severityColor}">
       <div class="finding-header">
@@ -334,8 +341,8 @@ function generateReport(auditResult, repoUrl) {
   </div>` : ''}
 
   <!-- Findings -->
-  ${findings && findings.length > 0 ? `<div class="findings-section">
-    <h2>Findings (${findings.length})</h2>
+  ${sortedFindings.length > 0 ? `<div class="findings-section">
+    <h2>Findings (${sortedFindings.length})</h2>
     <div class="findings-count">
       <div class="count-item" style="color:var(--red);border-color:rgba(248,113,113,0.2);">🔴 ${statistics?.critical_count || 0} Critical</div>
       <div class="count-item" style="color:var(--amber);border-color:rgba(251,191,36,0.2);">🟡 ${statistics?.warning_count || 0} Warnings</div>
