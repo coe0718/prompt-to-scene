@@ -9,6 +9,7 @@ node_modules/
 *.bak
 *.patch
 data/reports/
+data/audits/
 data/pr-dry-run/
 data/pr-dry-run.json
 data/ky-pr-source-first.json
