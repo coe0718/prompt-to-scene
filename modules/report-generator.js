@@ -20,10 +20,16 @@ function generateReport(auditResult, repoUrl) {
   const scoreColor = (v) =>
     v >= 85 ? '#4ade80' : v >= 65 ? '#fbbf24' : v >= 45 ? '#fb923c' : '#f87171';
 
+  const archTag = (value) => {
+    const text = String(value || '').trim();
+    if (!text || /^(unknown|not detected|n\/a)$/i.test(text)) return '';
+    return `<span class="arch-tag">${escHtml(text)}</span>`;
+  };
+
   const radarChart = (s) => {
     const keys = ['architecture', 'code_quality', 'security', 'documentation', 'maintainability'];
-    const labels = ['Architecture', 'Code Quality', 'Security', 'Documentation', 'Maint\'ability'];
-    const cx = 180, cy = 180, maxR = 140;
+    const labels = ['Architecture', 'Code Quality', 'Security', 'Documentation', 'Maintainability'];
+    const cx = 230, cy = 180, maxR = 130, labelR = maxR + 44;
     const angle = (i) => (Math.PI / 180) * (-90 + i * 72);
     const point = (r, i) => [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))];
 
@@ -54,7 +60,7 @@ function generateReport(auditResult, repoUrl) {
     // Axis labels
     let labelTexts = '';
     for (let i = 0; i < 5; i++) {
-      const [x, y] = point(maxR + 22, i);
+      const [x, y] = point(labelR, i);
       labelTexts += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter,sans-serif">${labels[i]}</text>`;
     }
 
@@ -68,7 +74,7 @@ function generateReport(auditResult, repoUrl) {
 
     return `<div style="display:inline-block;padding:16px;">
       <div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Health Radar</div>
-      <svg width="360" height="380" viewBox="0 0 360 380" xmlns="http://www.w3.org/2000/svg">
+      <svg width="460" height="390" viewBox="0 0 460 390" xmlns="http://www.w3.org/2000/svg">
         ${rings}
         ${axes}
         <polygon points="${dataPts.join(' ')}" fill="${fillColor}" fill-opacity="0.2" stroke="${fillColor}" stroke-width="2"/>
@@ -248,7 +254,7 @@ function generateReport(auditResult, repoUrl) {
 
   /* Radar Chart */
   .radar-section { padding: 20px 0; text-align: center; border-top: 1px solid var(--border); }
-  .radar-section svg { max-width: 360px; height: auto; }
+  .radar-section svg { width: 100%; max-width: 460px; height: auto; overflow: visible; }
 
   /* Footer */
   .footer {
@@ -319,10 +325,10 @@ function generateReport(auditResult, repoUrl) {
       <h3>Overview</h3>
       <p>${escHtml(architecture.summary || '')}</p>
       <div class="arch-tags">
-        ${architecture.framework ? `<span class="arch-tag">${escHtml(architecture.framework)}</span>` : ''}
-        ${architecture.language ? `<span class="arch-tag">${escHtml(architecture.language)}</span>` : ''}
-        ${architecture.pattern ? `<span class="arch-tag">${escHtml(architecture.pattern)}</span>` : ''}
-        ${architecture.build_system ? `<span class="arch-tag">${escHtml(architecture.build_system)}</span>` : ''}
+        ${archTag(architecture.framework)}
+        ${archTag(architecture.language)}
+        ${archTag(architecture.pattern)}
+        ${archTag(architecture.build_system)}
       </div>
     </div>
   </div>` : ''}

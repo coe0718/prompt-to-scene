@@ -103,6 +103,7 @@ function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 409
             return reject(new Error('Invalid LLM response structure'));
           }
           const msg = parsed.choices[0].message;
+          const finishReason = parsed.choices[0].finish_reason;
           const content = msg.content;
           if (content === undefined || content === null) {
             // Check for alternative response formats
@@ -115,6 +116,9 @@ function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 409
             console.warn('LLM: Unexpected response format —', JSON.stringify(parsed.choices[0]).slice(0, 500));
             resolve('');
           } else {
+            if (finishReason === 'length') {
+              return reject(new Error(`LLM response truncated at max_tokens (${maxTokens})`));
+            }
             resolve(content);
           }
         } catch(e) {
@@ -326,6 +330,88 @@ async function mapLimit(items, limit, fn) {
   return results;
 }
 
+function inferStructuralFallback(repoData, reason) {
+  const files = repoData.files || [];
+  const paths = files.map(f => String(f.path || '').toLowerCase());
+  const hasPath = (pattern) => paths.some(p => pattern.test(p));
+  const readFile = (name) => files.find(f => String(f.path || '').toLowerCase() === name)?.content || '';
+  const language = repoData.metadata?.language || (
+    hasPath(/\.py$/) ? 'Python' :
+    hasPath(/\.(js|ts|tsx|jsx)$/) ? 'JavaScript/TypeScript' :
+    hasPath(/\.rs$/) ? 'Rust' :
+    hasPath(/\.go$/) ? 'Go' :
+    'mixed'
+  );
+
+  const packageJson = readFile('package.json');
+  const pyproject = readFile('pyproject.toml');
+  const setupPy = hasPath(/^setup\.py$/);
+  const requirements = hasPath(/requirements.*\.txt$/);
+
+  const frameworks = [];
+  if (pyproject || setupPy || requirements || hasPath(/\.py$/)) frameworks.push('Python application');
+  if (/react|vite|next|docusaurus|ink/i.test(packageJson) || hasPath(/^(web|website|ui|ui-tui)\//)) frameworks.push('React/Node UI');
+  if (hasPath(/^dockerfile$/) || hasPath(/docker-compose\.ya?ml$/)) frameworks.push('Dockerized services');
+
+  const buildSystems = [];
+  if (pyproject) buildSystems.push('pyproject.toml');
+  if (setupPy) buildSystems.push('setuptools');
+  if (requirements) buildSystems.push('requirements.txt');
+  if (packageJson) buildSystems.push('npm');
+  if (hasPath(/^dockerfile$/) || hasPath(/docker-compose\.ya?ml$/)) buildSystems.push('Docker');
+
+  const keyDirectories = [];
+  const addDir = (dir, purpose) => {
+    if (hasPath(new RegExp('^' + dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/'))) keyDirectories.push(`${dir}/ - ${purpose}`);
+  };
+  addDir('plugins', 'plugin and integration modules');
+  addDir('skills', 'agent skills or reusable capabilities');
+  addDir('src', 'primary source code');
+  addDir('tests', 'test suites');
+  addDir('web', 'web application surface');
+  addDir('website', 'documentation or marketing site');
+  addDir('ui-tui', 'terminal UI surface');
+  addDir('scripts', 'automation and utility scripts');
+
+  const entryPoints = files
+    .map(f => f.path)
+    .filter(p => /^(main|index|app|server|run_agent)\.(py|js|ts)$/.test(p) || /^src\/(main|index|app|server)\.(py|js|ts)$/.test(p))
+    .slice(0, 5);
+
+  const pattern = hasPath(/^plugins\//) || hasPath(/^skills\//)
+    ? 'Plugin-based application'
+    : hasPath(/^(web|website|ui|ui-tui)\//)
+      ? 'Modular application with separate UI surfaces'
+      : 'Modular repository';
+
+  return {
+    architecture: {
+      summary: `Structural analysis was reconstructed from repository metadata and file layout after the LLM response was incomplete${reason ? ` (${reason})` : ''}. ${repoData.metadata?.full_name || 'This repository'} appears to be a ${language} codebase organized as a ${pattern.toLowerCase()} with ${files.length} analyzed files.`,
+      framework: frameworks.join(' + ') || `${language} project`,
+      language,
+      build_system: buildSystems.join(', ') || 'not detected',
+      pattern,
+      key_directories: keyDirectories,
+      entry_points: entryPoints,
+    },
+    complexity: {
+      total_files: repoData.total_files,
+      estimated_lines: 'unknown',
+      dependency_count: 'unknown',
+      complexity_assessment: repoData.total_files > 1000 ? 'high' : repoData.total_files > 200 ? 'medium' : 'low',
+    },
+    code_quality_signals: {
+      has_tests: hasPath(/(^|\/)(tests?|__tests__)\//) || hasPath(/\.(test|spec)\./),
+      has_ci: hasPath(/^\.github\/workflows\//) || hasPath(/^\.gitlab-ci\.ya?ml$/),
+      has_linting: hasPath(/(^|\/)(eslint|ruff|flake8|pylint|biome|prettier)\b/) || /eslint|ruff|prettier|biome/i.test(packageJson + pyproject),
+      has_documentation: hasPath(/^readme\.md$/) || hasPath(/^docs\//),
+      has_types: hasPath(/\.d\.ts$/) || hasPath(/py\.typed$/) || /typescript|mypy|pyright/i.test(packageJson + pyproject),
+      observations: ['Structural LLM output was incomplete; fallback inference used repository metadata and analyzed file paths.'],
+    },
+    recommended_focus_areas: ['source files', 'build and deployment configuration', 'security-sensitive integrations'],
+  };
+}
+
 async function analyzeRepo(repoData, onProgress) {
   const startTime = Date.now();
   // Prefer Kimi K2.6 via OpenRouter
@@ -359,16 +445,11 @@ async function analyzeRepo(repoData, onProgress) {
     const structuralRaw = await callLLM([
       { role: 'system', content: STRUCTURAL_PROMPT },
       { role: 'user', content: structuralContext },
-    ], model);
+    ], model, 0.3, 8192);
     structuralResult = JSON.parse(extractJSON(structuralRaw));
   } catch(e) {
-    console.warn('Auditor: Structural analysis failed, using defaults:', e.message);
-    structuralResult = {
-      architecture: { summary: 'Analysis failed', framework: 'unknown', language: repoData.metadata.language || 'unknown' },
-      complexity: { total_files: repoData.total_files, complexity_assessment: 'unknown' },
-      code_quality_signals: { has_tests: false, has_ci: false, has_linting: false, has_documentation: !!repoData.files.find(f => f.path === 'README.md') },
-      recommended_focus_areas: ['source files'],
-    };
+    console.warn('Auditor: Structural analysis failed, using inferred fallback:', e.message);
+    structuralResult = inferStructuralFallback(repoData, e.message);
   }
 
   // ─── Pass 2: Deep Analysis ────────────────────────────────────────────
