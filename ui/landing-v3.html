@@ -98,6 +98,11 @@ nav .btn{font-size:.82rem;padding:8px 18px}
 .term-dot.r{background:#ff5f57}
 .term-dot.y{background:#febc2e}
 .term-dot.g{background:#28c840}
+.terminal-tabs{display:flex;align-items:center;gap:4px;margin-left:auto}
+.terminal-tab{position:relative;border:1px solid transparent;background:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.68rem;padding:4px 9px;border-radius:6px;cursor:pointer;transition:all .2s}
+.terminal-tab:hover{color:var(--text);border-color:var(--border)}
+.terminal-tab.active{color:var(--green);background:rgba(74,222,128,0.08);border-color:rgba(74,222,128,0.16)}
+.terminal-tab.dirty:not(.active)::after{content:'';position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:var(--amber)}
 .terminal-body{padding:14px 16px;line-height:1.8;white-space:pre-wrap;word-break:break-all;max-height:280px;overflow-y:auto}
 .terminal-body .prompt{color:var(--green)}
 .terminal-body .cmd{color:var(--text)}
@@ -219,6 +224,8 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
   .examples{align-items:flex-start}
   .example{overflow-wrap:anywhere}
   .terminal-strip{width:calc(100vw - 48px)!important;max-width:100%!important}
+  .terminal-bar{flex-wrap:wrap}
+  .terminal-tabs{width:100%;margin-left:0;justify-content:flex-end}
   .terminal-body{font-size:.68rem;overflow-x:auto;word-break:normal}
   .feat-grid{grid-template-columns:repeat(2,1fr)}
   .stats-row{gap:28px}
@@ -287,6 +294,10 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
       <div class="term-dot y"></div>
       <div class="term-dot g"></div>
       <span style="font-size:.7rem;color:var(--dim);margin-left:6px">archiview — terminal</span>
+      <div class="terminal-tabs" role="tablist" aria-label="Terminal views">
+        <button id="terminal-tab-live" class="terminal-tab active" type="button" onclick="setTerminalTab('live')">Audit</button>
+        <button id="terminal-tab-preview" class="terminal-tab" type="button" onclick="setTerminalTab('preview')">Preview</button>
+      </div>
     </div>
     <div class="terminal-body" id="terminal-body">
 <span class="prompt">$</span> <span class="cmd">./archiview audit coe0718/archiview</span>
@@ -462,6 +473,10 @@ footer .hermes{display:inline-flex;align-items:center;gap:6px;margin-top:6px;pad
 let lastAuditedRepo = '';
 let lastReportHtml = '';
 window._selectedFileCount = 10;
+var activeTerminalTab = 'live';
+var terminalBuffers = { live: '', preview: '' };
+var terminalDirty = { live: false, preview: false };
+var terminalViewState = { live: makeTerminalViewState(), preview: makeTerminalViewState() };
 
 function setRepo(repo) {
   document.getElementById('repo-input').value = repo;
@@ -501,31 +516,241 @@ function renderReport(html) {
   result.style.display = 'block';
 }
 
+function makeTerminalViewState() {
+  return {
+    statusHtml: '',
+    progressVisible: false,
+    showSteps: false,
+    trackVisible: false,
+    fillWidth: '0%',
+    stepStates: { 'p-fetch': '', 'p-structural': '', 'p-deep': '', 'p-report': '' },
+    resultMode: 'empty',
+    resultHtml: '',
+    reportHtml: '',
+    toolbarVisible: false,
+    prVisible: false,
+    repo: '',
+  };
+}
+
+function applyTerminalView(tab) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  setProgressVisible(state.progressVisible, state.showSteps);
+  var progressTrack = document.getElementById('progress-track');
+  var progressFill = document.getElementById('progress-fill');
+  var status = document.getElementById('status');
+  var result = document.getElementById('result');
+  var toolbar = document.getElementById('result-toolbar');
+  var prSection = document.getElementById('pr-section');
+
+  if (progressTrack) progressTrack.style.display = state.trackVisible ? 'block' : 'none';
+  if (progressFill) progressFill.style.width = state.fillWidth || '0%';
+  Object.keys(state.stepStates).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.className = 'progress-step ' + (state.stepStates[id] || '');
+  });
+  if (status) status.innerHTML = state.statusHtml || '';
+
+  if (result) {
+    if (state.resultMode === 'report' && state.reportHtml) {
+      renderReport(state.reportHtml);
+    } else if (state.resultMode === 'loading') {
+      result.style.display = 'block';
+      result.innerHTML = state.resultHtml || '';
+    } else {
+      result.style.display = 'none';
+      result.innerHTML = '';
+    }
+  }
+  if (toolbar) toolbar.style.display = state.toolbarVisible ? 'flex' : 'none';
+  if (prSection) prSection.style.display = state.prVisible ? 'block' : 'none';
+
+  lastReportHtml = state.reportHtml || '';
+  lastAuditedRepo = state.repo || '';
+}
+
+function setTabStatus(tab, html) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.statusHtml = html || '';
+  if (tab === activeTerminalTab) {
+    var status = document.getElementById('status');
+    if (status) status.innerHTML = state.statusHtml;
+  }
+}
+
+function setTabProgress(tab, visible, showSteps) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.progressVisible = Boolean(visible);
+  state.showSteps = Boolean(showSteps);
+  if (tab === activeTerminalTab) setProgressVisible(state.progressVisible, state.showSteps);
+}
+
+function setTabTrack(tab, visible, width) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.trackVisible = Boolean(visible);
+  if (width !== undefined) state.fillWidth = width;
+  if (tab === activeTerminalTab) {
+    var track = document.getElementById('progress-track');
+    var fill = document.getElementById('progress-fill');
+    if (track) track.style.display = state.trackVisible ? 'block' : 'none';
+    if (fill) fill.style.width = state.fillWidth || '0%';
+  }
+}
+
+function setTabStep(tab, id, stepState) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.stepStates[id] = stepState || '';
+  if (tab === activeTerminalTab) {
+    var el = document.getElementById(id);
+    if (el) el.className = 'progress-step ' + state.stepStates[id];
+  }
+}
+
+function setTabResultLoading(tab, html) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.resultMode = 'loading';
+  state.resultHtml = html || '';
+  state.reportHtml = '';
+  if (tab === activeTerminalTab) {
+    var result = document.getElementById('result');
+    if (result) {
+      result.style.display = 'block';
+      result.innerHTML = state.resultHtml;
+    }
+  }
+}
+
+function setTabResultHidden(tab) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.resultMode = 'empty';
+  state.resultHtml = '';
+  state.reportHtml = '';
+  if (tab === activeTerminalTab) {
+    var result = document.getElementById('result');
+    if (result) {
+      result.style.display = 'none';
+      result.innerHTML = '';
+    }
+  }
+}
+
+function setTabReport(tab, html, repo) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.resultMode = 'report';
+  state.reportHtml = html || '';
+  state.resultHtml = '';
+  if (repo !== undefined) state.repo = repo || '';
+  if (tab === activeTerminalTab) {
+    renderReport(state.reportHtml);
+    lastReportHtml = state.reportHtml;
+    lastAuditedRepo = state.repo;
+  }
+}
+
+function setTabToolbar(tab, visible) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.toolbarVisible = Boolean(visible);
+  if (tab === activeTerminalTab) {
+    var toolbar = document.getElementById('result-toolbar');
+    if (toolbar) toolbar.style.display = state.toolbarVisible ? 'flex' : 'none';
+  }
+}
+
+function setTabPrSection(tab, visible) {
+  var state = terminalViewState[tab];
+  if (!state) return;
+  state.prVisible = Boolean(visible);
+  if (tab === activeTerminalTab) {
+    var prSection = document.getElementById('pr-section');
+    if (prSection) prSection.style.display = state.prVisible ? 'block' : 'none';
+  }
+}
+
 function terminalEl() {
   return document.getElementById('terminal-body');
 }
 
-function resetTerminal(repo) {
+function updateTerminalTabs() {
+  ['live', 'preview'].forEach(function(tab) {
+    var btn = document.getElementById('terminal-tab-' + tab);
+    if (!btn) return;
+    btn.classList.toggle('active', tab === activeTerminalTab);
+    btn.classList.toggle('dirty', Boolean(terminalDirty[tab]));
+  });
+}
+
+function renderTerminalTab(tab) {
   var term = terminalEl();
   if (!term) return;
-  term.innerHTML =
-    '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + escHtml(cleanRepo(repo) || repo) + '</span>\n' +
-    '<span class="out">⟳ Initializing audit stream...</span>\n';
+  term.innerHTML = terminalBuffers[tab] || '<span class="dim">No terminal output yet.</span>\n';
   term.scrollTop = term.scrollHeight;
 }
 
-function writeTerminal(text, cls) {
-  var term = terminalEl();
-  if (!term) return;
-  term.insertAdjacentHTML('beforeend', '<span class="' + (cls || 'out') + '">' + escHtml(text) + '</span>\n');
-  term.scrollTop = term.scrollHeight;
+function setTerminalTab(tab) {
+  if (!terminalBuffers.hasOwnProperty(tab)) return;
+  activeTerminalTab = tab;
+  terminalDirty[tab] = false;
+  renderTerminalTab(tab);
+  updateTerminalTabs();
+  applyTerminalView(tab);
 }
 
-function writeTerminalHtml(html) {
+function setTerminalBuffer(tab, html) {
+  if (!terminalBuffers.hasOwnProperty(tab)) return;
+  terminalBuffers[tab] = html;
+  if (tab === activeTerminalTab) {
+    renderTerminalTab(tab);
+  } else {
+    terminalDirty[tab] = true;
+    updateTerminalTabs();
+  }
+}
+
+function appendTerminalHtml(tab, html) {
+  if (!terminalBuffers.hasOwnProperty(tab)) tab = activeTerminalTab;
+  terminalBuffers[tab] = (terminalBuffers[tab] || '') + html + '\n';
+  if (tab === activeTerminalTab) {
+    renderTerminalTab(tab);
+  } else {
+    terminalDirty[tab] = true;
+    updateTerminalTabs();
+  }
+}
+
+function resetTerminal(repo, tab, mode) {
+  tab = tab || 'live';
+  mode = mode || 'audit';
+  var command = mode === 'preview' ? './archiview preview ' : './archiview audit ';
+  var message = mode === 'preview' ? '⟳ Loading cached report preview...' : '⟳ Initializing audit stream...';
+  setTerminalBuffer(tab,
+    '<span class="prompt">$</span> <span class="cmd">' + command + escHtml(cleanRepo(repo) || repo) + '</span>\n' +
+    '<span class="out">' + message + '</span>\n'
+  );
+  setTerminalTab(tab);
+}
+
+function writeTerminal(text, cls, tab) {
+  appendTerminalHtml(tab || 'live', '<span class="' + (cls || 'out') + '">' + escHtml(text) + '</span>');
+}
+
+function writeTerminalHtml(html, tab) {
+  appendTerminalHtml(tab || 'live', html);
+}
+
+function initTerminalTabs() {
   var term = terminalEl();
-  if (!term) return;
-  term.insertAdjacentHTML('beforeend', html + '\n');
-  term.scrollTop = term.scrollHeight;
+  if (term && !terminalBuffers.live) terminalBuffers.live = term.innerHTML;
+  if (!terminalBuffers.preview) terminalBuffers.preview = '<span class="dim">No report preview activity yet.</span>\n';
+  setTerminalTab(activeTerminalTab);
 }
 
 function selectFileCount(el, val) {
@@ -535,80 +760,79 @@ function selectFileCount(el, val) {
 }
 
 function loadCachedReport(repo) {
+  var tab = 'preview';
   setRepo(repo);
-  resetTerminal(repo);
-  writeTerminal('↳ Checking local report cache...', 'dim');
-  setProgressVisible(true, false);
-  document.getElementById('progress-track').style.display = 'none';
-  document.getElementById('status').innerHTML = '<span class="spinner"></span> Loading cached report...';
-  document.getElementById('result').style.display = 'block';
-  document.getElementById('result').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);"><span class="spinner"></span> Loading cached report...</div>';
+  resetTerminal(repo, tab, 'preview');
+  writeTerminal('↳ Checking local report cache...', 'dim', tab);
+  setTabProgress(tab, true, false);
+  setTabTrack(tab, false);
+  setTabStatus(tab, '<span class="spinner"></span> Loading cached report...');
+  setTabResultLoading(tab, '<div style="text-align:center;padding:40px;color:var(--muted);"><span class="spinner"></span> Loading cached report...</div>');
+  setTabToolbar(tab, false);
+  setTabPrSection(tab, false);
   fetch('/report?repo=' + encodeURIComponent(repo))
     .then(function(r) {
       if (!r.ok) throw new Error('No cached report');
       return r.text();
     })
     .then(function(html) {
-      lastReportHtml = html;
-      renderReport(html);
-      document.getElementById('result-toolbar').style.display = 'flex';
-      document.getElementById('status').innerHTML = '<span style="color:var(--green);">✓ Loaded cached report for ' + escHtml(repo) + '</span>';
-      lastAuditedRepo = repo;
-      document.getElementById('pr-section').style.display = 'block';
-      writeTerminal('✓ Cached report loaded.', 'ok');
-      writeTerminal('→ Report mounted below.', 'out');
+      setTabReport(tab, html, repo);
+      setTabToolbar(tab, true);
+      setTabStatus(tab, '<span style="color:var(--green);">✓ Loaded cached report for ' + escHtml(repo) + '</span>');
+      setTabPrSection(tab, true);
+      writeTerminal('✓ Cached report loaded.', 'ok', tab);
+      writeTerminal('→ Report mounted below.', 'out', tab);
     })
     .catch(function() {
       // No cached report — run fresh audit
-      document.getElementById('status').innerHTML = 'No cached report found. Running fresh audit...';
-      writeTerminal('↳ No cached report found. Starting fresh audit...', 'warn');
+      setTabStatus(tab, 'No cached report found. Running fresh audit...');
+      writeTerminal('↳ No cached report found. Starting fresh audit...', 'warn', tab);
       runAudit();
     });
 }
 
 async function runAudit() {
+  const tab = 'live';
   const input = document.getElementById('repo-input');
   const btn = document.getElementById('audit-btn');
-  const status = document.getElementById('status');
-  const result = document.getElementById('result');
-  const toolbar = document.getElementById('result-toolbar');
-  const progress = document.getElementById('progress');
-  const progressTrack = document.getElementById('progress-track');
-  const progressFill = document.getElementById('progress-fill');
 
   const repo = input.value.trim();
   if (!repo) {
-    setProgressVisible(true, false);
-    progressTrack.style.display = 'none';
-    status.textContent = '⚠️ Enter a GitHub repo URL';
+    setTerminalTab(tab);
+    setTabProgress(tab, true, false);
+    setTabTrack(tab, false);
+    setTabStatus(tab, '⚠️ Enter a GitHub repo URL');
     return;
   }
 
   btn.disabled = true;
   btn.textContent = '⏳ Auditing...';
-  status.innerHTML = '';
-  result.style.display = 'none';
-  toolbar.style.display = 'none';
-  setProgressVisible(true, true);
-  progressTrack.style.display = 'block';
-  progressFill.style.width = '0%';
-  lastReportHtml = '';
-  resetTerminal(repo);
+  setTabStatus(tab, '');
+  setTabResultHidden(tab);
+  setTabToolbar(tab, false);
+  setTabPrSection(tab, false);
+  setTabProgress(tab, true, true);
+  setTabTrack(tab, true, '0%');
+  terminalViewState[tab].repo = repo;
+  resetTerminal(repo, tab);
 
   function setStep(id, state) {
-    const el = document.getElementById(id);
-    el.className = 'progress-step ' + state;
+    setTabStep(tab, id, state);
   }
 
   setStep('p-fetch', 'active');
 
   // Elapsed timer
   let elapsed = 0;
-  const timerEl = document.createElement('span');
-  timerEl.style.cssText = 'color:var(--muted);font-size:0.75rem;margin-left:8px;';
+  let statusMessage = '';
+  const timerStyle = 'color:var(--muted);font-size:0.75rem;margin-left:8px;';
+  function setTimedStatus(msg) {
+    statusMessage = msg;
+    setTabStatus(tab, '<span class="spinner"></span> ' + escHtml(msg) + '<span style="' + timerStyle + '">(' + elapsed + 's)</span>');
+  }
   const timerInterval = setInterval(() => {
     elapsed++;
-    timerEl.textContent = '(' + elapsed + 's)';
+    if (statusMessage) setTimedStatus(statusMessage);
   }, 1000);
 
   // SSE stream reader
@@ -621,21 +845,19 @@ async function runAudit() {
       setStep('p-deep', step === 'deep' || step === 'aggregation' ? 'active' : (step !== 'structural' ? 'done' : ''));
       setStep('p-report', step === 'report' ? 'active' : '');
     }
-    status.innerHTML = '<span class="spinner"></span> ' + escHtml(msg);
-    status.appendChild(timerEl);
-    writeTerminal('[' + (step || 'status') + '] ' + msg, 'out');
+    setTimedStatus(msg);
+    writeTerminal('[' + (step || 'status') + '] ' + msg, 'out', tab);
     // Update progress bar
     var fillPct = { fetch: 25, structural: 50, deep: 75, aggregation: 85, report: 100 };
-    if (fillPct[step]) progressFill.style.width = fillPct[step] + '%';
+    if (fillPct[step]) setTabTrack(tab, true, fillPct[step] + '%');
   }
 
   try {
     setStep('p-fetch', 'done');
     setStep('p-structural', 'active');
-    progressFill.style.width = '25%';
-    status.innerHTML = '<span class="spinner"></span> Starting audit...';
-    status.appendChild(timerEl);
-    writeTerminal('[fetch] Opening audit stream...', 'out');
+    setTabTrack(tab, true, '25%');
+    setTimedStatus('Starting audit...');
+    writeTerminal('[fetch] Opening audit stream...', 'out', tab);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1800000);
@@ -700,30 +922,30 @@ async function runAudit() {
 
     if (!reportHtml) throw new Error('No report received from server');
 
-    lastReportHtml = reportHtml;
-    writeTerminal('[report] Report HTML received.', 'ok');
+    writeTerminal('[report] Report HTML received.', 'ok', tab);
 
     // Update URL for sharing
     window.history.replaceState(null, '', '?repo=' + encodeURIComponent(cleanRepo(repo)));
 
     setStep('p-report', 'done');
-    progressFill.style.width = '100%';
-    renderReport(reportHtml);
-    toolbar.style.display = 'flex';
+    setTabTrack(tab, true, '100%');
+    setTabReport(tab, reportHtml, repo);
+    setTabToolbar(tab, true);
     clearInterval(timerInterval);
-    status.innerHTML = '<span style="color:var(--green);">✓ Audit complete. Report loaded below.</span>';
-    lastAuditedRepo = repo;
-    document.getElementById('pr-section').style.display = 'block';
+    statusMessage = '';
+    setTabStatus(tab, '<span style="color:var(--green);">✓ Audit complete. Report loaded below.</span>');
+    setTabPrSection(tab, true);
     refreshHistory();
-    writeTerminal('✓ Audit complete. Report loaded below.', 'ok');
+    writeTerminal('✓ Audit complete. Report loaded below.', 'ok', tab);
     confettiBurst();
   } catch(e) {
     clearInterval(timerInterval);
+    statusMessage = '';
     const msg = e.name === 'AbortError' ? 'Request timed out. The LLM may be slow or unreachable.' : e.message;
-    status.innerHTML = '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>';
-    writeTerminal('✖ ' + msg, 'err');
-    setProgressVisible(true, false);
-    progressTrack.style.display = 'none';
+    setTabStatus(tab, '<span style="color:var(--red);">❌ ' + escHtml(msg) + '</span>');
+    writeTerminal('✖ ' + msg, 'err', tab);
+    setTabProgress(tab, true, false);
+    setTabTrack(tab, false);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Audit →';
@@ -762,10 +984,10 @@ function copyBadgeMarkdown() {
   var badgeUrl = window.location.origin + '/api/audit/badge?repo=' + encodeURIComponent(lastAuditedRepo);
   var md = '[![Archiview](' + badgeUrl + ')](' + window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(lastAuditedRepo) + ')';
   navigator.clipboard.writeText(md).then(function() {
-    var el = document.getElementById('status');
-    el.innerHTML = '<span style="color:var(--green);">Badge markdown copied! Paste in your README.</span>';
+    setTabStatus(activeTerminalTab, '<span style="color:var(--green);">Badge markdown copied! Paste in your README.</span>');
     setTimeout(function() {
-      if (el.innerHTML.indexOf('Badge markdown') !== -1) el.innerHTML = '';
+      var state = terminalViewState[activeTerminalTab];
+      if (state && state.statusHtml.indexOf('Badge markdown') !== -1) setTabStatus(activeTerminalTab, '');
     }, 3000);
   }).catch(function() {
     prompt('Copy this badge markdown:', md);
@@ -842,10 +1064,10 @@ function copyShareLink() {
   var clean = repo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '');
   var url = window.location.origin + window.location.pathname + '?repo=' + encodeURIComponent(clean || '');
   navigator.clipboard.writeText(url).then(function() {
-    var el = document.getElementById('status');
-    el.innerHTML = '<span style="color:var(--green);">Share link copied!</span>';
+    setTabStatus(activeTerminalTab, '<span style="color:var(--green);">Share link copied!</span>');
     setTimeout(function() {
-      if (el.innerHTML.indexOf('Share link') !== -1) el.innerHTML = '';
+      var state = terminalViewState[activeTerminalTab];
+      if (state && state.statusHtml.indexOf('Share link') !== -1) setTabStatus(activeTerminalTab, '');
     }, 2000);
   }).catch(function() {
     prompt('Copy this link:', url);
@@ -1056,6 +1278,7 @@ function loadFamousRepos() {
 loadFamousRepos();
 
 // ─── Auto-load from URL param ──────────────────────────────────────────
+initTerminalTabs();
 (function() {
   var params = new URLSearchParams(window.location.search);
   var repo = params.get('repo');
@@ -1091,14 +1314,13 @@ async function populateTerminal(repo) {
     }) : null;
     if (!h) h = history[0];
     var scoreColor = h.overall >= 80 ? 'var(--green)' : h.overall >= 60 ? 'var(--amber)' : 'var(--pink)';
-    var term = document.getElementById('terminal-body');
-    if (!term) return;
-    term.innerHTML =
-      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + (h.full_name || h.repo) + '</span>\n' +
+    setTerminalBuffer('live',
+      '<span class="prompt">$</span> <span class="cmd">./archiview audit ' + escHtml(h.full_name || h.repo) + '</span>\n' +
       '<span class="out">┌─ Structural Analysis ───────────────── <span class="highlight">done</span></span>\n' +
       '<span class="out">├─ Deep Code Review (' + (h.files_analyzed || '—') + ' files) ─ <span class="highlight">done</span></span>\n' +
       '<span class="out">├─ Aggregation ────────────────────────── <span class="highlight">done</span></span>\n' +
-      '<span class="out">└─ Overall Score: <span class="highlight" style="color:' + scoreColor + '">' + (h.overall || '—') + '/100</span> · ' + (h.findings || '—') + ' findings · ' + (h.critical || '0') + ' critical</span>';
+      '<span class="out">└─ Overall Score: <span class="highlight" style="color:' + scoreColor + '">' + (h.overall || '—') + '/100</span> · ' + (h.findings || '—') + ' findings · ' + (h.critical || '0') + ' critical</span>'
+    );
   } catch(e) {}
 }
 
