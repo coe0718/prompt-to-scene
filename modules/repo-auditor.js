@@ -1019,7 +1019,26 @@ function isUnverifiablePRFinding(finding) {
   );
 }
 
-async function generateFixPR(auditResult, repoUrl) {
+function isSameFinding(a, b) {
+  return (
+    String(a?.severity || '') === String(b?.severity || '') &&
+    String(a?.file || '') === String(b?.file || '') &&
+    String(a?.title || '') === String(b?.title || '')
+  );
+}
+
+function withoutFinding(auditResult, finding) {
+  return {
+    ...auditResult,
+    findings: (auditResult.findings || []).filter(f => !isSameFinding(f, finding)),
+  };
+}
+
+async function generateFixPR(auditResult, repoUrl, options = {}) {
+  const retryDepth = options.retryDepth || 0;
+  const maxCandidateAttempts = options.maxCandidateAttempts || 3;
+  const previousCandidateFailures = options.previousCandidateFailures || [];
+
   const findings = (auditResult.findings || []).filter(f => {
     // Guard: reject doc/generated/lockfile/test-fixture findings at function entry
     const path = (f.file || '').toLowerCase();
@@ -1034,6 +1053,13 @@ async function generateFixPR(auditResult, repoUrl) {
   const warnings = findings.filter(f => f.severity === 'WARNING');
 
   if (criticalIssues.length === 0 && warnings.length === 0) {
+    if (previousCandidateFailures.length) {
+      return {
+        status: 'fix_generation_failed',
+        reason: 'No remaining CRITICAL or WARNING candidates after failed patch attempts.',
+        attempted_candidates: previousCandidateFailures,
+      };
+    }
     return { dry_run: null, message: 'No CRITICAL or WARNING findings — nothing to PR' };
   }
 
@@ -1090,6 +1116,7 @@ async function generateFixPR(auditResult, repoUrl) {
           evaluated_count: selectorFindings.length,
           explicit_rejection_count: explicitRejections,
           selected_count: 0,
+          attempted_candidates: previousCandidateFailures,
           safety_gates: [
             'single code file only',
             'non-doc source change',
@@ -1141,11 +1168,45 @@ async function generateFixPR(auditResult, repoUrl) {
   ];
   const fileLower = selectedFinding.file.toLowerCase();
   if (hardReject.some(p => p.test(fileLower))) {
-    return { dry_run: null, message: `Rejected: selected finding targets non-source path (${selectedFinding.file})` };
+    return retryWithNextCandidate(`Rejected non-source path: ${selectedFinding.file}`);
   }
   // Soft reject for test-only — log why, still allow (Tuck's "broken test masks real failure" exception)
   if (testReject.some(p => p.test(fileLower))) {
     console.warn(`PR: Test-only path ${selectedFinding.file} — proceeding only if finding suggests real bug masked by test`);
+  }
+
+  function candidateFailure(reason) {
+    return {
+      severity: selectedFinding.severity,
+      file: selectedFinding.file,
+      title: selectedFinding.title,
+      reason,
+    };
+  }
+
+  async function retryWithNextCandidate(reason) {
+    const failures = [...previousCandidateFailures, candidateFailure(reason)];
+    if (retryDepth + 1 >= maxCandidateAttempts) {
+      return {
+        status: 'fix_generation_failed',
+        reason: `Candidate attempts exhausted — ${reason}`,
+        attempted_candidates: failures,
+        selected_finding: {
+          severity: selectedFinding.severity,
+          file: selectedFinding.file,
+          title: selectedFinding.title,
+          fix_summary: selectorResult.selected.fix_summary,
+          confidence: selectorResult.confidence,
+        },
+      };
+    }
+
+    console.warn(`PR: Candidate failed (${reason}); trying next candidate...`);
+    return generateFixPR(withoutFinding(auditResult, selectedFinding), repoUrl, {
+      retryDepth: retryDepth + 1,
+      maxCandidateAttempts,
+      previousCandidateFailures: failures,
+    });
   }
 
   // ─── Step 2: Fetch file content from GitHub ───────────────────────────
@@ -1157,20 +1218,7 @@ async function generateFixPR(auditResult, repoUrl) {
       selectedFinding.file
     );
   } catch(e) {
-    return {
-      dry_run: {
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-        patch: null,
-        error: `Could not fetch file from GitHub: ${e.message}`,
-      },
-      message: 'Selection succeeded but file fetch failed — check permissions or repo visibility',
-    };
+    return retryWithNextCandidate(`Could not fetch file from GitHub: ${e.message}`);
   }
 
   // ─── Step 3: Generate the fix ─────────────────────────────────────────
@@ -1223,34 +1271,10 @@ async function generateFixPR(auditResult, repoUrl) {
     }
 
     if (!fixResult) {
-      return {
-        status: 'fix_generation_failed',
-        reason: 'Fixer attempts failed — ' + fixerErrors.join(' | '),
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-      };
+      return retryWithNextCandidate('Fixer attempts failed — ' + fixerErrors.join(' | '));
     }
   } catch(e) {
-    return {
-      dry_run: {
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-        original_content: fileContent.slice(0, 2000) + '\n\n... (truncated)',
-        patch: null,
-        error: 'Fix generation failed: ' + e.message.slice(0, 200),
-      },
-      message: 'Selection and fetch succeeded but fix generation failed',
-    };
+    return retryWithNextCandidate('Fix generation failed: ' + e.message.slice(0, 200));
   }
 
   // ─── Step 4: Build dry-run package ────────────────────────────────────
