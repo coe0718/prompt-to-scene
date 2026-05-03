@@ -67,11 +67,13 @@ const scanHistory = [];
 const DATA_DIR = path.join(__dirname, 'data');
 const HISTORY_FILE = path.join(DATA_DIR, 'scan-history.json');
 const REPORTS_DIR = path.join(DATA_DIR, 'reports');
+const AUDITS_DIR = path.join(DATA_DIR, 'audits');
 
 // Load persisted history
 try {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+  if (!fs.existsSync(AUDITS_DIR)) fs.mkdirSync(AUDITS_DIR, { recursive: true });
   if (fs.existsSync(HISTORY_FILE)) {
     const loaded = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
     if (Array.isArray(loaded)) scanHistory.push(...loaded);
@@ -84,6 +86,119 @@ function saveHistory() {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(scanHistory), 'utf8');
   } catch(e) { /* silent */ }
+}
+
+function auditSafeName(repo) {
+  return String(repo || '')
+    .replace(/https?:\/\/github\.com\//, '')
+    .replace(/[^a-zA-Z0-9_\/-]/g, '_')
+    .replace(/\//g, '__');
+}
+
+function htmlDecode(text) {
+  return String(text || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function stripHtml(html) {
+  return htmlDecode(String(html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+}
+
+function auditJsonPath(repo) {
+  return path.join(AUDITS_DIR, auditSafeName(repo) + '.json');
+}
+
+function reportHtmlPath(repo) {
+  return path.join(REPORTS_DIR, auditSafeName(repo) + '.html');
+}
+
+function saveAuditResult(repo, result) {
+  try {
+    if (!fs.existsSync(AUDITS_DIR)) fs.mkdirSync(AUDITS_DIR, { recursive: true });
+    fs.writeFileSync(auditJsonPath(repo), JSON.stringify(result), 'utf8');
+  } catch(e) {
+    console.warn('Could not save audit JSON:', e.message);
+  }
+}
+
+function loadAuditResultFromJson(repo) {
+  const jsonPath = auditJsonPath(repo);
+  if (!fs.existsSync(jsonPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  } catch(e) {
+    console.warn('Could not load audit JSON:', e.message);
+    return null;
+  }
+}
+
+function loadAuditResultFromReport(repo) {
+  const reportPath = reportHtmlPath(repo);
+  if (!fs.existsSync(reportPath)) return null;
+
+  try {
+    const html = fs.readFileSync(reportPath, 'utf8');
+    const fullName = stripHtml((html.match(/<h1>([\s\S]*?)<\/h1>/i) || [])[1] || repo);
+    const languageMatch = html.match(/<span>🔤\s*([\s\S]*?)<\/span>/i);
+    const starsMatch = html.match(/<span>⭐\s*([\d,]+)/i);
+    const summary = stripHtml((html.match(/<div class="summary">([\s\S]*?)<\/div>/i) || [])[1] || '');
+    const findingBlocks = html.match(/<div class="finding" style="border-left:3px solid [^"]+">[\s\S]*?(?=\n<div class="finding" style="border-left:3px solid |\n  <\/div>\n\n  <!-- Recommendations -->)/g) || [];
+
+    const findings = findingBlocks.map(block => {
+      const severity = stripHtml((block.match(/<span class="finding-severity"[^>]*>([\s\S]*?)<\/span>/i) || [])[1]);
+      const category = stripHtml((block.match(/<span class="finding-category">([\s\S]*?)<\/span>/i) || [])[1]);
+      const file = stripHtml((block.match(/<span class="finding-file">([\s\S]*?)<\/span>/i) || [])[1]);
+      const title = stripHtml((block.match(/<div class="finding-title">([\s\S]*?)<\/div>/i) || [])[1]);
+      const description = stripHtml((block.match(/<div class="finding-desc">([\s\S]*?)<\/div>/i) || [])[1]);
+      let suggestion = stripHtml((block.match(/<div class="finding-suggestion">([\s\S]*?)<\/div>/i) || [])[1]);
+      suggestion = suggestion.replace(/^💡\s*/, '');
+      return { severity, category, file, title, description, suggestion };
+    }).filter(f => f.severity && f.title);
+
+    if (!findings.length) return null;
+
+    const criticalCount = findings.filter(f => f.severity === 'CRITICAL').length;
+    const warningCount = findings.filter(f => f.severity === 'WARNING').length;
+    const infoCount = findings.filter(f => f.severity === 'INFO').length;
+
+    return {
+      metadata: {
+        full_name: fullName || repo,
+        language: languageMatch ? stripHtml(languageMatch[1]) : undefined,
+        stars: starsMatch ? Number(starsMatch[1].replace(/,/g, '')) : undefined,
+      },
+      summary,
+      findings,
+      statistics: {
+        findings_count: findings.length,
+        critical_count: criticalCount,
+        warning_count: warningCount,
+        info_count: infoCount,
+      },
+      scores: {},
+      architecture: { summary: 'Loaded from saved report HTML' },
+    };
+  } catch(e) {
+    console.warn('Could not reconstruct audit from report:', e.message);
+    return null;
+  }
+}
+
+function getCachedAudit(repo) {
+  const cached = auditCache.get(repo);
+  if (cached?.result) return cached;
+
+  const persisted = loadAuditResultFromJson(repo) || loadAuditResultFromReport(repo);
+  if (!persisted) return null;
+
+  const hydrated = { result: persisted, repoUrl: repo, timestamp: Date.now(), restored: true };
+  auditCache.set(repo, hydrated);
+  return hydrated;
 }
 
 // ─── Famous repos cache ────────────────────────────────────────────────────
@@ -424,16 +539,18 @@ if (url.pathname === '/api/audit/famous' && method === 'GET') {
 if (url.pathname === '/report' && method === 'GET') {
   var repo = (url.searchParams.get('repo') || '').trim();
   if (!repo) return jsonResponse(res, 400, { error: '?repo=user/repo required' });
-  var safeName = repo.replace(/https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9_\/-]/g, '_').replace(/\//g, '__');
-  var reportPath = path.join(REPORTS_DIR, safeName + '.html');
+  var reportPath = reportHtmlPath(repo);
   if (fs.existsSync(reportPath)) {
     return serveFile(res, reportPath);
   }
-  // Check the in-memory audit cache as fallback
-  var cached = auditCache.get(repo);
+  // Check memory or persisted audit data as fallback.
+  var cached = getCachedAudit(repo);
   if (cached && cached.result) {
     var html = reportGen.generateReport(cached.result, repo);
-    try { fs.writeFileSync(reportPath, html, 'utf8'); } catch(e) {}
+    try {
+      fs.writeFileSync(reportPath, html, 'utf8');
+      saveAuditResult(repo, cached.result);
+    } catch(e) {}
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
     return res.end(html);
   }
@@ -839,9 +956,9 @@ async function handleAudit(req, res) {
     clearInterval(heartbeat);
     // Persist report to file for /report route
     try {
-      var safeName = repoUrl.replace(/https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9_\/-]/g, '_').replace(/\//g, '__');
-      var reportPath = path.join(REPORTS_DIR, safeName + '.html');
+      var reportPath = reportHtmlPath(repoUrl);
       fs.writeFileSync(reportPath, htmlReport, 'utf8');
+      saveAuditResult(repoUrl, result);
       console.log(`✓ Report saved: ${reportPath}`);
     } catch(e) { console.warn('Could not save report file:', e.message); }
 
@@ -862,9 +979,9 @@ function handleBadge(req, res, url) {
   var repo = (url.searchParams.get('repo') || '').trim();
   if (!repo) return jsonResponse(res, 400, { error: '?repo=user/repo required' });
 
-  // Look up in audit cache first, then scan history
+  // Look up in memory, persisted audit data, saved report, then scan history.
   var score;
-  var cached = auditCache.get(repo);
+  var cached = getCachedAudit(repo);
   if (cached && cached.result && cached.result.scores) {
     score = cached.result.scores.overall;
   } else {
@@ -932,12 +1049,12 @@ async function handleAuditPR(req, res) {
     return jsonResponse(res, 400, { error: 'Send { repo: \"user/repo\" }' });
   }
 
-  // Look up cached audit result
-  const cached = auditCache.get(repoUrl);
+  // Look up memory first, then persisted audit JSON or a saved HTML report.
+  const cached = getCachedAudit(repoUrl);
   if (!cached || !cached.result) {
     return jsonResponse(res, 400, {
-      error: 'No cached audit for this repo. Run the audit first.',
-      hint: 'POST /api/audit with { repo: "user/repo" } first',
+      error: 'No existing audit found for this repo. Run the audit first.',
+      hint: 'POST /api/audit with { repo: "user/repo" } first, then generate the PR.',
     });
   }
 
