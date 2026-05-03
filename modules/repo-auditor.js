@@ -106,6 +106,9 @@ function callLLM(messages, model = 'minimax', temperature = 0.3, maxTokens = 409
           const finishReason = parsed.choices[0].finish_reason;
           const content = msg.content;
           if (content === undefined || content === null) {
+            if (finishReason === 'length') {
+              return reject(new Error(`LLM response truncated at max_tokens (${maxTokens})`));
+            }
             // Check for alternative response formats
             if (typeof msg === 'string') { resolve(msg); return; }
             if (Array.isArray(msg.content)) {
@@ -1127,82 +1130,46 @@ async function generateFixPR(auditResult, repoUrl) {
       file_path: selectedFinding.file,
       file_content: fileContent,
     };
-    const raw = await callLLM([
-      { role: 'system', content: PR_FIXER_PROMPT },
-      { role: 'user', content: JSON.stringify(fixerInput, null, 2) },
-    ], model, 0.3, 8192);
+    const fixerAttempts = [
+      { model, maxTokens: 12288 },
+      ...(model !== 'minimax27' ? [{ model: 'minimax27', maxTokens: 12288 }] : []),
+    ];
+    const fixerErrors = [];
 
-    // Parse fixer output — try JSON.parse, fall through to structured failure
-    let extractedRaw;
-    try {
-      extractedRaw = extractJSON(raw);
-      fixResult = JSON.parse(extractedRaw);
-    } catch(e) {
-      return {
-        status: 'fix_generation_failed',
-        reason: 'Fixer returned unparseable output: ' + e.message.slice(0, 150),
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-        raw_output_path: '/tmp/archiview-json-fail-' + Date.now() + '.txt',
-      };
+    for (const attempt of fixerAttempts) {
+      try {
+        const raw = await callLLM([
+          { role: 'system', content: PR_FIXER_PROMPT },
+          { role: 'user', content: JSON.stringify(fixerInput, null, 2) },
+        ], attempt.model, 0.2, attempt.maxTokens);
+
+        const parsedFix = JSON.parse(extractJSON(raw));
+        if (!parsedFix || parsedFix.status !== 'patch_generated') {
+          throw new Error(parsedFix?.reason ?? 'Fixer returned status !== patch_generated');
+        }
+
+        const ver = parsedFix.validation || {};
+        if (!ver.command && !ver.fallback) {
+          throw new Error('Validation confidence too low: no validation command or fallback produced');
+        }
+        if (!parsedFix.unified_diff || parsedFix.unified_diff.trim().length === 0) {
+          throw new Error('Fixer returned no unified_diff — no fix applied');
+        }
+
+        replacementContent = applyUnifiedDiff(fileContent, parsedFix.unified_diff);
+        fixResult = parsedFix;
+        break;
+      } catch(e) {
+        const attemptLabel = `${attempt.model}: ${e.message.slice(0, 160)}`;
+        fixerErrors.push(attemptLabel);
+        console.warn(`PR: Fixer attempt failed (${attemptLabel})`);
+      }
     }
 
-    // Crash guard: check for structured failure
-    if (!fixResult || fixResult.status !== 'patch_generated') {
+    if (!fixResult) {
       return {
         status: 'fix_generation_failed',
-        reason: fixResult?.reason ?? 'Fixer returned status !== patch_generated',
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-      };
-    }
-
-    // ─── Gate 3b: Post-fixer validation check ───────────────────────────
-    const ver = fixResult.validation || {};
-    if (!ver.command && !ver.fallback) {
-      return {
-        status: 'fix_generation_failed',
-        reason: 'Validation confidence too low: no validation command or fallback produced',
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-      };
-    }
-    // If no diff was produced, the fixer didn't actually change anything
-    if (!fixResult.unified_diff || fixResult.unified_diff.trim().length === 0) {
-      return {
-        status: 'fix_generation_failed',
-        reason: 'Fixer returned no unified_diff — no fix applied',
-        selected_finding: {
-          severity: selectedFinding.severity,
-          file: selectedFinding.file,
-          title: selectedFinding.title,
-          fix_summary: selectorResult.selected.fix_summary,
-          confidence: selectorResult.confidence,
-        },
-      };
-    }
-
-    try {
-      replacementContent = applyUnifiedDiff(fileContent, fixResult.unified_diff);
-    } catch(e) {
-      return {
-        status: 'fix_generation_failed',
-        reason: 'Generated diff failed apply check: ' + e.message.slice(0, 160),
+        reason: 'Fixer attempts failed — ' + fixerErrors.join(' | '),
         selected_finding: {
           severity: selectedFinding.severity,
           file: selectedFinding.file,

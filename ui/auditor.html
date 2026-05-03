@@ -1072,6 +1072,21 @@ function dryRunToUiPr(dryRun) {
   };
 }
 
+function prGenerationMessage(data) {
+  var parts = [];
+  if (data.reason) parts.push(data.reason);
+  else if (data.decision) parts.push(data.decision);
+  else if (data.message) parts.push(data.message);
+  else if (data.status) parts.push('PR generation stopped: ' + data.status.replace(/_/g, ' '));
+  else parts.push('No publishable PR plan was generated.');
+
+  var finding = data.selected_finding || (data.dry_run && data.dry_run.selected_finding);
+  if (finding && finding.title) {
+    parts.push('Candidate: ' + finding.title + (finding.file ? ' in ' + finding.file : ''));
+  }
+  return parts.join(' ');
+}
+
 async function generatePR() {
   const btn = document.getElementById('pr-btn');
   const progress = document.getElementById('pr-progress');
@@ -1103,7 +1118,7 @@ async function generatePR() {
 
     const pr = data.pr || dryRunToUiPr(data.dry_run);
     if (!pr) {
-      planDiv.innerHTML = '<span style="color:var(--amber);">' + escHtml(data.message || 'No issues found for PR') + '</span>';
+      planDiv.innerHTML = '<span style="color:var(--amber);">' + escHtml(prGenerationMessage(data)) + '</span>';
       planDiv.style.display = 'block';
       return;
     }
