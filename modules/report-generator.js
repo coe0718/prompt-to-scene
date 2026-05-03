@@ -5,6 +5,8 @@
  * No external dependencies (CSS inlined, no CDN)
  */
 
+const escHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
 function generateReport(auditResult, repoUrl) {
   const { metadata, scores, findings, recommendations, strengths, risks, summary, verdict, architecture, statistics, generated_at } = auditResult;
 
@@ -384,11 +386,6 @@ function generateReport(auditResult, repoUrl) {
 </script>
 </body>
 </html>`;
-}
-
-function escHtml(s) {
-  if (typeof s !== 'string') return String(s || '');
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 module.exports = { generateReport };
