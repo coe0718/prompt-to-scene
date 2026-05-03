@@ -911,17 +911,48 @@ function applyUnifiedDiff(originalContent, unifiedDiff) {
   let sourceIndex = 0;
   let hunkCount = 0;
 
+  function hunkOriginalLines(lines) {
+    return lines
+      .filter(line => line[0] === ' ' || line[0] === '-')
+      .map(line => line.slice(1));
+  }
+
+  function sequenceMatches(start, sequence) {
+    if (start < sourceIndex || start + sequence.length > sourceLines.length) return false;
+    for (let j = 0; j < sequence.length; j++) {
+      if (sourceLines[start + j] !== sequence[j]) return false;
+    }
+    return true;
+  }
+
+  function findHunkStart(expectedIndex, hunkLines) {
+    const sequence = hunkOriginalLines(hunkLines);
+    if (sequence.length === 0) return Math.max(sourceIndex, expectedIndex);
+    if (sequenceMatches(expectedIndex, sequence)) return expectedIndex;
+
+    let best = -1;
+    let bestDistance = Infinity;
+    for (let candidate = sourceIndex; candidate <= sourceLines.length - sequence.length; candidate++) {
+      if (!sequenceMatches(candidate, sequence)) continue;
+      const distance = Math.abs(candidate - expectedIndex);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+
+    if (best !== -1) return best;
+    throw new Error(`Diff context mismatch near source line ${expectedIndex + 1}`);
+  }
+
   for (let i = 0; i < diffLines.length; i++) {
     const header = diffLines[i].match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
     if (!header) continue;
 
     hunkCount++;
     const oldStart = Number(header[1]);
-    const hunkSourceIndex = Math.max(0, oldStart - 1);
-
-    while (sourceIndex < hunkSourceIndex) {
-      output.push(sourceLines[sourceIndex++]);
-    }
+    const expectedSourceIndex = Math.max(0, oldStart - 1);
+    const hunkLines = [];
 
     i++;
     for (; i < diffLines.length; i++) {
@@ -936,7 +967,16 @@ function applyUnifiedDiff(originalContent, unifiedDiff) {
       }
       if (line.startsWith('\\ No newline at end of file')) continue;
       if (line.length === 0 && i === diffLines.length - 1) continue;
+      hunkLines.push(line);
+    }
 
+    const hunkSourceIndex = findHunkStart(expectedSourceIndex, hunkLines);
+
+    while (sourceIndex < hunkSourceIndex) {
+      output.push(sourceLines[sourceIndex++]);
+    }
+
+    for (const line of hunkLines) {
       const marker = line[0];
       const value = line.slice(1);
 
@@ -965,10 +1005,26 @@ function applyUnifiedDiff(originalContent, unifiedDiff) {
   return output.join('\n') + (sourceHadFinalNewline ? '\n' : '');
 }
 
+function isUnverifiablePRFinding(finding) {
+  const text = [
+    finding?.title,
+    finding?.description,
+    finding?.suggestion,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  return (
+    /truncated|cut off|ends abruptly|\bincomplete\b|partial source/.test(text) ||
+    (/missing closing brace|syntax error|compilation failure|compile error/.test(text) &&
+      /incomplete|truncated|abrupt|cut off|missing implementation/.test(text))
+  );
+}
+
 async function generateFixPR(auditResult, repoUrl) {
   const findings = (auditResult.findings || []).filter(f => {
     // Guard: reject doc/generated/lockfile/test-fixture findings at function entry
     const path = (f.file || '').toLowerCase();
+    if (!path || path === 'general') return false;
+    if (isUnverifiablePRFinding(f)) return false;
     if (/\.mdx?$|\.txt$|\.rst$|\.min\.(js|css)$|\bpackage-lock\.json$|\bCargo\.lock$|\.lock$/.test(path)) return false;
     if (/^docs\/|^examples\/|^dist\/|^build\/|^target\/|^vendor\/|^node_modules\/|^coverage\//.test(path)) return false;
     if (/\/docs\/|\/examples\/|\/dist\/|\/build\/|\/target\/|\/vendor\/|\/node_modules\/|\/coverage\/|\/fixtures\/|__snapshots__\//.test(path)) return false;
@@ -1482,4 +1538,4 @@ async function publishPR(prPlan, repoUrl) {
   };
 }
 
-module.exports = { analyzeRepo, generateFixPR, publishPR, extractJSON, callLLM };
+module.exports = { analyzeRepo, generateFixPR, publishPR, extractJSON, callLLM, applyUnifiedDiff };
